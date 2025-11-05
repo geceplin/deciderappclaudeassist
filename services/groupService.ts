@@ -1,4 +1,3 @@
-
 import {
   collection,
   doc,
@@ -43,11 +42,10 @@ export const generateInviteCode = async (): Promise<string> => {
   for (let i = 0; i < 6; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  // Ensure code is unique
   const groupQuery = query(collection(db, GROUPS), where('inviteCode', '==', code));
   const querySnapshot = await getDocs(groupQuery);
   if (!querySnapshot.empty) {
-    return generateInviteCode(); // Recurse if code exists
+    return generateInviteCode();
   }
   return code;
 };
@@ -66,7 +64,6 @@ export const createGroup = async (name: string, color: string, userId: string): 
       movieCount: 0,
       lastActivity: serverTimestamp(),
     });
-    // Add groupId to the user's profile
     const userRef = doc(db, USERS, userId);
     await updateDoc(userRef, {
       groupIds: arrayUnion(groupRef.id),
@@ -78,18 +75,116 @@ export const createGroup = async (name: string, color: string, userId: string): 
   }
 };
 
-// Get all groups a user is a member of (real-time)
-export const onUserGroupsSnapshot = (userId: string, callback: (groups: Group[]) => void): Unsubscribe => {
+// ====================================================================================
+// DEBUG-ENHANCED REAL-TIME GROUP FETCHER
+// ====================================================================================
+// This function listens for real-time updates to the user's groups.
+// It now includes an `onError` callback to pass Firestore errors back to the component.
+//
+// LIKELY ISSUE: The query below uses `where` on 'members' and `orderBy` on 'lastActivity'.
+// This requires a composite index in Firestore. If the index is missing, Firestore
+// will reject the query. The `onError` callback will catch this and display a helpful
+// error message in the UI, often with a direct link to create the index.
+// ====================================================================================
+export const onUserGroupsSnapshot = (
+    userId: string, 
+    onUpdate: (groups: Group[]) => void, 
+    onError: (error: Error) => void
+): Unsubscribe => {
+    console.log('[groupService] Subscribing to groups for user:', userId);
+
     const q = query(
-        collection(db, GROUPS), 
+        collection(db, GROUPS),
         where('members', 'array-contains', userId),
         orderBy('lastActivity', 'desc')
     );
-    return onSnapshot(q, (snapshot) => {
-        const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
-        callback(groups);
-    });
+
+    console.log('[groupService] Using query:', q);
+
+    const unsubscribe = onSnapshot(q,
+      (snapshot) => {
+        console.log(`[groupService] Snapshot updated. Found ${snapshot.docs.length} document(s).`);
+        if (snapshot.metadata.hasPendingWrites) {
+          console.log('[groupService] Data is from a local write.');
+        }
+
+        const groups = snapshot.docs.map(doc => {
+            const data = doc.data();
+            // Fallback for missing lastActivity field
+            if (!data.lastActivity) {
+                console.warn(`[groupService] Group ${doc.id} is missing 'lastActivity'. Defaulting to 'createdAt'.`);
+                data.lastActivity = data.createdAt || Timestamp.now();
+            }
+            return { id: doc.id, ...data } as Group;
+        });
+
+        console.log('[groupService] Parsed groups data:', groups);
+        onUpdate(groups);
+      },
+      (error) => {
+        console.error("[groupService] onSnapshot listener failed:", error);
+        onError(error);
+      }
+    );
+
+    return unsubscribe;
 };
+
+
+// ====================================================================================
+// ALTERNATIVE IMPLEMENTATION (Client-Side Sorting)
+// ====================================================================================
+// If you cannot or do not want to create the Firestore index, you can use this function.
+// It removes the `orderBy` from the query and performs the sorting in your browser.
+// This is slightly less efficient for large datasets but works without extra setup.
+//
+// To use this, rename it to `onUserGroupsSnapshot` and rename the original function.
+// ====================================================================================
+/*
+export const onUserGroupsSnapshot_ClientSort = (
+    userId: string,
+    onUpdate: (groups: Group[]) => void,
+    onError: (error: Error) => void
+): Unsubscribe => {
+    console.log('[groupService-ClientSort] Subscribing to groups for user:', userId);
+
+    const q = query(
+        collection(db, GROUPS),
+        where('members', 'array-contains', userId)
+    );
+    
+    console.log('[groupService-ClientSort] Using query (no ordering):', q);
+
+    const unsubscribe = onSnapshot(q,
+      (snapshot) => {
+        console.log(`[groupService-ClientSort] Snapshot updated. Found ${snapshot.docs.length} document(s).`);
+
+        const groups = snapshot.docs.map(doc => {
+            const data = doc.data();
+            if (!data.lastActivity) {
+                data.lastActivity = data.createdAt || Timestamp.now();
+            }
+            return { id: doc.id, ...data } as Group;
+        });
+
+        // Manual sorting on the client
+        groups.sort((a, b) => {
+            const timeA = a.lastActivity?.toMillis() || 0;
+            const timeB = b.lastActivity?.toMillis() || 0;
+            return timeB - timeA; // Descending order
+        });
+
+        console.log('[groupService-ClientSort] Parsed and sorted groups data:', groups);
+        onUpdate(groups);
+      },
+      (error) => {
+        console.error("[groupService-ClientSort] onSnapshot listener failed:", error);
+        onError(error);
+      }
+    );
+    return unsubscribe;
+};
+*/
 
 // Get details for a single group by invite code
 export const getGroupByInviteCode = async (inviteCode: string): Promise<Group | null> => {
@@ -143,20 +238,17 @@ export const leaveGroup = async (groupId: string, userId: string): Promise<void>
     }
     const group = groupDoc.data() as Group;
 
-    // If the user is the last member, delete the group
     if (group.members.length === 1 && group.members[0] === userId) {
       transaction.delete(groupRef);
     } else {
-      let updateData: { members: string[], createdBy?: string } = {
+      let updateData: any = {
         members: arrayRemove(userId)
       };
-      // If the creator is leaving, transfer ownership to the next member
       if (group.createdBy === userId) {
         updateData.createdBy = group.members.find(id => id !== userId);
       }
       transaction.update(groupRef, updateData);
     }
-    // Remove group from user's list
     transaction.update(userRef, { groupIds: arrayRemove(groupId) });
   });
 };
@@ -173,13 +265,10 @@ export const deleteGroup = async (groupId: string, userId: string): Promise<void
 
     const batch = writeBatch(db);
 
-    // Remove group ID from all members
     for (const memberId of group.members) {
         const userRef = doc(db, USERS, memberId);
         batch.update(userRef, { groupIds: arrayRemove(groupId) });
     }
-
-    // Delete the group itself
     batch.delete(groupRef);
 
     await batch.commit();

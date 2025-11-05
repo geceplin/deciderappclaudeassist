@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { onUserGroupsSnapshot, createGroup } from '../services/groupService';
@@ -26,19 +25,45 @@ const GroupsPage: React.FC = () => {
   const { user, signOut } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null); // State to hold fetch errors
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isInviteModalOpen, setInviteModalOpen] = useState(false);
   const [newGroupInfo, setNewGroupInfo] = useState<{ code: string; name: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    console.log('[GroupsPage] Component mounted or user changed.');
+    if (!user) {
+        console.log('[GroupsPage] No user found, skipping subscription.');
+        setLoading(false);
+        return;
+    };
+
+    console.log('[GroupsPage] useEffect: Subscribing to user groups for user:', user.uid);
     setLoading(true);
-    const unsubscribe = onUserGroupsSnapshot(user.uid, (fetchedGroups) => {
-      setGroups(fetchedGroups);
-      setLoading(false);
-    });
-    return () => unsubscribe();
+    setError(null);
+
+    const unsubscribe = onUserGroupsSnapshot(
+      user.uid,
+      (fetchedGroups) => {
+        console.log('[GroupsPage] onSnapshot SUCCESS: Received updated groups list.', fetchedGroups);
+        setGroups(fetchedGroups);
+        setError(null); // Clear previous errors on successful fetch
+        setLoading(false);
+      },
+      (err) => {
+        console.error('[GroupsPage] onSnapshot ERROR:', err);
+        // The error message from Firestore is often very helpful, especially for missing indexes.
+        setError(`Failed to load groups: ${err.message}. Check the browser console for a link to create a required Firestore index.`);
+        setLoading(false);
+      }
+    );
+
+    // Cleanup function
+    return () => {
+      console.log('[GroupsPage] useEffect cleanup: Unsubscribing from snapshot listener.');
+      unsubscribe();
+    };
   }, [user]);
 
   const showToast = (message: string) => {
@@ -48,11 +73,16 @@ const GroupsPage: React.FC = () => {
   
   const handleCreateGroup = async (name: string, color: string) => {
     if (!user) return;
-    const { id, inviteCode } = await createGroup(name, color, user.uid);
-    setNewGroupInfo({ code: inviteCode, name });
-    showToast("Group created! 🎉 Share the invite code.");
-    setCreateModalOpen(false);
-    setInviteModalOpen(true);
+    try {
+        const { id, inviteCode } = await createGroup(name, color, user.uid);
+        setNewGroupInfo({ code: inviteCode, name });
+        showToast("Group created! 🎉 Share the invite code.");
+        setCreateModalOpen(false);
+        setInviteModalOpen(true);
+    } catch(err: any) {
+        console.error("Failed to create group:", err);
+        setError(err.message);
+    }
   };
 
   const EmptyState = () => (
@@ -62,6 +92,29 @@ const GroupsPage: React.FC = () => {
         <p className="mt-2 text-gray-400">Start your first group to begin solving movie night debates. 🍿</p>
     </div>
   );
+  
+  const renderContent = () => {
+    console.log(`[GroupsPage] renderContent called. Loading: ${loading}, Error: ${error}, Groups: ${groups.length}`);
+    if (loading) {
+        console.log('[GroupsPage] Rendering Skeletons.');
+        return [...Array(3)].map((_, i) => <GroupCardSkeleton key={i} />);
+    }
+    if (error) {
+        console.log('[GroupsPage] Rendering Error message.');
+        return (
+            <div className="col-span-full mt-16 text-center bg-dark-elevated p-6 rounded-lg">
+                <h3 className="text-xl text-cinema-red font-bold">Oops! Something went wrong.</h3>
+                <p className="text-gray-400 mt-2 whitespace-pre-wrap">{error}</p>
+            </div>
+        );
+    }
+    if (groups.length > 0) {
+        console.log('[GroupsPage] Rendering Group Cards.');
+        return groups.map((group) => <GroupCard key={group.id} group={group} />);
+    }
+    console.log('[GroupsPage] Rendering Empty State.');
+    return <EmptyState />;
+  };
 
   return (
     <>
@@ -88,19 +141,9 @@ const GroupsPage: React.FC = () => {
             </button>
           </div>
 
-          {loading ? (
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(3)].map((_, i) => <GroupCardSkeleton key={i} />)}
-             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {groups.length > 0 ? (
-                    groups.map((group) => <GroupCard key={group.id} group={group} />)
-                ) : (
-                    <EmptyState />
-                )}
-            </div>
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {renderContent()}
+          </div>
         </main>
       </div>
 
