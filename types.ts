@@ -1,11 +1,25 @@
 
 import { User as FirebaseUser } from 'firebase/auth';
+import { Timestamp } from 'firebase/firestore';
 
 export interface UserProfile {
   uid: string;
   email: string | null;
   displayName: string | null;
-  createdAt: number;
+  createdAt: Timestamp;
+  groupIds?: string[];
+}
+
+export interface Group {
+    id: string;
+    name:string;
+    createdBy: string;
+    createdAt: Timestamp;
+    members: string[];
+    inviteCode: string;
+    color: string;
+    movieCount: number;
+    lastActivity: Timestamp;
 }
 
 export interface AuthContextType {

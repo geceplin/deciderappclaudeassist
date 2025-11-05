@@ -5,6 +5,9 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
+import GroupsPage from './pages/GroupsPage';
+import GroupDetailPage from './pages/GroupDetailPage';
+import JoinGroupPage from './pages/JoinGroupPage';
 import { Film } from './components/icons/Icons';
 
 // Placeholder for the landing page
@@ -26,27 +29,6 @@ const Landing: React.FC = () => (
   </div>
 );
 
-// Placeholder for the groups page
-const GroupsPage: React.FC = () => {
-    const { signOut, user } = useAuth();
-    return (
-        <div className="min-h-screen bg-dark flex flex-col items-center justify-center text-center p-4">
-            <h1 className="text-4xl font-bold text-white">Welcome, {user?.displayName || 'User'}!</h1>
-            <p className="text-gray-400 mt-2">This is the protected groups page.</p>
-            <button
-                onClick={signOut}
-                className="mt-8 px-6 py-2 bg-cinema-red text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition"
-            >
-                Sign Out
-            </button>
-        </div>
-    );
-};
-
-// Import useAuth at the end to avoid "used before defined" with GroupsPage
-import { useAuth } from './hooks/useAuth';
-
-
 function App() {
   return (
     <AuthProvider>
@@ -55,11 +37,21 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/join/:inviteCode?" element={<ProtectedRoute><JoinGroupPage /></ProtectedRoute>} />
+          
           <Route 
             path="/groups" 
             element={
               <ProtectedRoute>
                 <GroupsPage />
+              </ProtectedRoute>
+            } 
+          />
+           <Route 
+            path="/groups/:groupId" 
+            element={
+              <ProtectedRoute>
+                <GroupDetailPage />
               </ProtectedRoute>
             } 
           />
