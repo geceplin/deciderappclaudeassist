@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { searchMovies, addMovieToGroup } from '../../services/movieService';
+import { getPosterUrl } from '../../services/tmdbService';
 import { MovieSearchResult } from '../../types';
 import { X, Search, Plus } from '../icons/Icons';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,7 +16,7 @@ const SearchResultCard: React.FC<{
     onAdd: () => void,
     isAdding: boolean,
 }> = ({ movie, onAdd, isAdding }) => {
-    const posterUrl = `https://image.tmdb.org/t/p/w300${movie.posterPath}`;
+    const posterUrl = getPosterUrl(movie.posterPath, 'w300');
     return (
         <div className="group relative aspect-[2/3] bg-dark rounded-lg overflow-hidden shadow-md">
             <img src={posterUrl} alt={movie.title} className="w-full h-full object-cover" />
@@ -60,8 +61,11 @@ const AddMovieModal: React.FC<AddMovieModalProps> = ({ isOpen, onClose, groupId 
   }, [isOpen]);
 
   useEffect(() => {
-    if (query.trim().length < 3) {
+    if (query.trim().length < 2) { // Changed to 2 for quicker searching
       setResults([]);
+      setError('');
+      setLoading(false);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       return;
     }
 
@@ -81,7 +85,7 @@ const AddMovieModal: React.FC<AddMovieModalProps> = ({ isOpen, onClose, groupId 
         } finally {
             setLoading(false);
         }
-    }, 500); // Debounce API calls
+    }, 300); // Debounce API calls (reduced to 300ms)
 
     return () => {
         if (timeoutRef.current) {
@@ -128,7 +132,7 @@ const AddMovieModal: React.FC<AddMovieModalProps> = ({ isOpen, onClose, groupId 
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search for a movie title..."
+                    placeholder="Search any movie..."
                     className="w-full h-14 pl-12 pr-4 bg-dark border-2 border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gold"
                     autoFocus
                 />
@@ -137,8 +141,10 @@ const AddMovieModal: React.FC<AddMovieModalProps> = ({ isOpen, onClose, groupId 
         
         <div className="p-6 pt-0 min-h-[300px]">
             {loading && (
-                <div className="flex justify-center items-center h-full">
-                    <div className="w-8 h-8 border-4 border-gold border-t-transparent rounded-full animate-spin"></div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-pulse">
+                    {[...Array(4)].map((_, i) => (
+                        <div key={i} className="aspect-[2/3] bg-dark rounded-lg"></div>
+                    ))}
                 </div>
             )}
             {error && <p className="text-center text-cinema-red mt-4">{error}</p>}
@@ -156,8 +162,11 @@ const AddMovieModal: React.FC<AddMovieModalProps> = ({ isOpen, onClose, groupId 
                 </div>
             )}
 
-            {!loading && !error && query.length >= 3 && results.length === 0 && (
-                <p className="text-center text-gray-400 mt-4">No results found for "{query}".</p>
+            {!loading && !error && query.trim().length >=2 && results.length === 0 && (
+                <p className="text-center text-gray-400 mt-4">No results found for "{query}". Try a different search.</p>
+            )}
+            {!loading && !error && query.trim().length < 2 && (
+                 <p className="text-center text-gray-500 mt-4">Start typing to find movies</p>
             )}
         </div>
       </div>

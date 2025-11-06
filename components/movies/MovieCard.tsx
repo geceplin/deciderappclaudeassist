@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { Movie, UserProfile } from '../../types';
 import { toggleMovieLike, removeMovieFromGroup } from '../../services/movieService';
-import { Heart, Trash2, Users } from '../icons/Icons';
+import { getPosterUrl } from '../../services/tmdbService';
+import { Heart, Trash2 } from '../icons/Icons';
 import Avatar from '../common/Avatar';
 
 interface MovieCardProps {
@@ -18,7 +19,7 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, groupId, addedBy }) => {
 
   const isLiked = user ? movie.likes.includes(user.uid) : false;
   const canDelete = user ? movie.addedBy === user.uid : false;
-  const posterUrl = `https://image.tmdb.org/t/p/w500${movie.posterPath}`;
+  const posterUrl = getPosterUrl(movie.posterPath, 'w500');
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();

@@ -14,52 +14,36 @@ import {
   query,
   orderBy
 } from 'firebase/firestore';
-import { GoogleGenAI, Type } from "@google/genai";
 import { db } from './firebase';
 import { Movie, MovieSearchResult } from '../types';
+import * as tmdbService from './tmdbService';
 
 const GROUPS = 'groups';
 const MOVIES = 'movies';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-const movieSearchSchema = {
-    type: Type.ARRAY,
-    items: {
-        type: Type.OBJECT,
-        properties: {
-            title: { type: Type.STRING, description: 'The full title of the movie.' },
-            year: { type: Type.NUMBER, description: 'The release year of the movie.' },
-            overview: { type: Type.STRING, description: 'A brief, one-paragraph summary of the movie.' },
-            posterPath: { type: Type.STRING, description: 'The poster path from TMDb, e.g., "/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg". Should not be null or empty.' },
-        },
-        required: ["title", "year", "overview", "posterPath"],
-    },
-};
-
+/**
+ * Searches for movies using the TMDb service and returns them in the format expected by the app.
+ * @param searchQuery The user's search query.
+ * @returns A promise that resolves to an array of movie search results.
+ */
 export const searchMovies = async (searchQuery: string): Promise<MovieSearchResult[]> => {
     try {
-        const prompt = `Search for movies matching "${searchQuery}". Provide a list of up to 6 relevant results. For each movie, include its title, release year, a brief overview, and its poster path from themoviedb.org (TMDb). Ensure the poster path is just the path string, not the full URL.`;
-
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: movieSearchSchema,
-            },
-        });
-
-        const jsonString = response.text;
-        const movies = JSON.parse(jsonString);
-        // Filter out any results that Gemini might have returned with a null/empty poster path
-        return movies.filter((m: any) => m.posterPath && m.posterPath.trim() !== ''); 
+        const response = await tmdbService.searchMovies(searchQuery);
+        return response.results;
     } catch (error) {
-        console.error("Error searching movies with Gemini:", error);
-        throw new Error("Failed to search for movies. The model may be unavailable.");
+        console.error("Error searching movies via tmdbService:", error);
+        // Propagate a user-friendly error message
+        throw new Error("Failed to search for movies. The movie database might be temporarily unavailable.");
     }
 };
 
+/**
+ * Subscribes to real-time updates for movies within a specific group.
+ * @param groupId The ID of the group.
+ * @param onUpdate Callback function to handle the updated list of movies.
+ * @param onError Callback function to handle errors.
+ * @returns An unsubscribe function to detach the listener.
+ */
 export const onGroupMoviesSnapshot = (
     groupId: string,
     onUpdate: (movies: Movie[]) => void,
@@ -73,6 +57,12 @@ export const onGroupMoviesSnapshot = (
     }, onError);
 };
 
+/**
+ * Adds a new movie suggestion to a group's watchlist.
+ * @param groupId The ID of the group.
+ * @param movie The movie data to add.
+ * @param userId The ID of the user adding the movie.
+ */
 export const addMovieToGroup = async (groupId: string, movie: MovieSearchResult, userId: string): Promise<void> => {
     const groupRef = doc(db, GROUPS, groupId);
     const moviesColRef = collection(groupRef, MOVIES);
@@ -98,6 +88,12 @@ export const addMovieToGroup = async (groupId: string, movie: MovieSearchResult,
     });
 };
 
+/**
+ * Toggles a user's "like" on a movie.
+ * @param groupId The ID of the group containing the movie.
+ * @param movieId The ID of the movie to like/unlike.
+ * @param userId The ID of the user performing the action.
+ */
 export const toggleMovieLike = async (groupId: string, movieId: string, userId: string): Promise<void> => {
     const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
     const movieDoc = await getDoc(movieRef);
@@ -112,6 +108,12 @@ export const toggleMovieLike = async (groupId: string, movieId: string, userId: 
     }
 };
 
+/**
+ * Removes a movie from a group's watchlist.
+ * @param groupId The ID of the group.
+ * @param movieId The ID of the movie to remove.
+ * @param userId The ID of the user performing the action (must be the one who added it).
+ */
 export const removeMovieFromGroup = async (groupId: string, movieId: string, userId: string): Promise<void> => {
     const groupRef = doc(db, GROUPS, groupId);
     const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
