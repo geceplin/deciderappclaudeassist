@@ -1,4 +1,3 @@
-
 import { User as FirebaseUser } from 'firebase/auth';
 import { Timestamp } from 'firebase/firestore';
 
@@ -20,6 +19,24 @@ export interface Group {
     color: string;
     movieCount: number;
     lastActivity: Timestamp;
+}
+
+export interface Movie {
+  id: string;
+  title: string;
+  year: number;
+  overview: string;
+  posterPath: string;
+  addedBy: string; // userId
+  addedAt: Timestamp;
+  likes: string[]; // array of userIds
+}
+
+export interface MovieSearchResult {
+  title: string;
+  year: number;
+  overview: string;
+  posterPath: string;
 }
 
 export interface AuthContextType {

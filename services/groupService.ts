@@ -218,7 +218,10 @@ export const joinGroup = async (inviteCode: string, userId: string): Promise<Gro
     const userRef = doc(db, USERS, userId);
 
     const batch = writeBatch(db);
-    batch.update(groupRef, { members: arrayUnion(userId) });
+    batch.update(groupRef, { 
+        members: arrayUnion(userId),
+        lastActivity: serverTimestamp(),
+    });
     batch.update(userRef, { groupIds: arrayUnion(group.id) });
     await batch.commit();
     
@@ -242,7 +245,8 @@ export const leaveGroup = async (groupId: string, userId: string): Promise<void>
       transaction.delete(groupRef);
     } else {
       let updateData: any = {
-        members: arrayRemove(userId)
+        members: arrayRemove(userId),
+        lastActivity: serverTimestamp(),
       };
       if (group.createdBy === userId) {
         updateData.createdBy = group.members.find(id => id !== userId);
@@ -272,10 +276,4 @@ export const deleteGroup = async (groupId: string, userId: string): Promise<void
     batch.delete(groupRef);
 
     await batch.commit();
-};
-
-// Update group activity timestamp
-export const updateGroupActivity = async (groupId: string) => {
-    const groupRef = doc(db, GROUPS, groupId);
-    await updateDoc(groupRef, { lastActivity: serverTimestamp() });
 };
