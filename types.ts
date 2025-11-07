@@ -83,6 +83,28 @@ export interface MovieDetails extends MovieSearchResult {
     genres: string[];
 }
 
+// TMDb API specific types for movie details modal
+export interface CastMember {
+  id: number;
+  name: string;
+  character: string;
+  profilePath: string | null;
+}
+
+export interface CrewMember {
+  id: number;
+  name: string;
+  job: string;
+}
+
+export interface Video {
+  key: string;
+  site: string;
+  type: string;
+  name: string;
+  official: boolean;
+}
+
 export interface AuthContextType {
   user: FirebaseUser | null;
   loading: boolean;

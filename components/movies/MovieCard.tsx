@@ -9,9 +9,10 @@ import OpinionButtons from './OpinionButtons';
 interface MovieCardProps {
   movie: Movie;
   groupId: string;
+  onClick: () => void;
 }
 
-const MovieCard: React.FC<MovieCardProps> = ({ movie, groupId }) => {
+const MovieCard: React.FC<MovieCardProps> = ({ movie, groupId, onClick }) => {
   const { user } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState('');
@@ -34,9 +35,18 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, groupId }) => {
     }
   };
 
+  // Stop propagation on the opinion buttons so they don't trigger the card's onClick
+  const handleOpinionClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="bg-dark-elevated rounded-2xl p-4 flex flex-col items-center text-center shadow-lg transition-shadow duration-300 hover:shadow-gold-glow">
-      <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden">
+    <button
+      onClick={onClick}
+      className="bg-dark-elevated rounded-2xl p-4 flex flex-col items-center text-center shadow-lg transition-all duration-300 hover:shadow-gold-glow hover:-translate-y-1 w-full"
+      aria-label={`View details for ${movie.title}`}
+    >
+      <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden pointer-events-none">
         <img 
           src={posterUrl} 
           alt={movie.title} 
@@ -51,29 +61,31 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, groupId }) => {
         )}
       </div>
 
-      <div className="w-full mt-4">
+      <div className="w-full mt-4 pointer-events-none">
         <h3 className="font-bold text-white truncate" title={movie.title}>{movie.title}</h3>
         <p className="text-sm text-gray-400">{movie.year}</p>
         
         <p className="text-xs text-gray-500 mt-2 h-10 overflow-hidden" title={movie.overview}>
             {movie.overview.substring(0, 60)}{movie.overview.length > 60 ? '...' : ''}
         </p>
+      </div>
 
+      <div onClick={handleOpinionClick} className="w-full">
         <OpinionButtons 
           movie={movie}
           currentUserId={user.uid}
           onOpinionChange={handleOpinionChange}
           disabled={isUpdating}
         />
-        
-        {error && <p className="text-xs text-cinema-red mt-2">{error}</p>}
-
-        <div className="flex items-center space-x-2 mt-4 text-xs text-gray-500 justify-center">
-            <Avatar name={movie.addedByName} size="sm" />
-            <span>Added by {movie.addedByName}</span>
-        </div>
       </div>
-    </div>
+      
+      {error && <p className="text-xs text-cinema-red mt-2">{error}</p>}
+
+      <div className="flex items-center space-x-2 mt-4 text-xs text-gray-500 justify-center pointer-events-none">
+          <Avatar name={movie.addedByName} size="sm" />
+          <span>Added by {movie.addedByName}</span>
+      </div>
+    </button>
   );
 };
 

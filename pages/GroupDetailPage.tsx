@@ -10,6 +10,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import InviteModal from '../components/groups/InviteModal';
 import AddMovieModal from '../components/movies/AddMovieModal';
 import MovieCard from '../components/movies/MovieCard';
+import MovieDetailsModal from '../components/movies/MovieDetailsModal';
 import { ChevronLeft, Plus, Film, Ticket } from '../components/icons/Icons';
 
 type OpinionFilter = 'all' | Opinion;
@@ -28,6 +29,7 @@ const GroupDetailPage: React.FC = () => {
 
   const [isInviteModalOpen, setInviteModalOpen] = useState(false);
   const [isAddMovieModalOpen, setAddMovieModalOpen] = useState(false);
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
 
   useEffect(() => {
     if (!groupId) { navigate('/groups'); return; }
@@ -182,7 +184,12 @@ const GroupDetailPage: React.FC = () => {
           {filteredMovies.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                   {filteredMovies.map(movie => (
-                      <MovieCard key={movie.id} movie={movie} groupId={group.id} />
+                      <MovieCard 
+                        key={movie.id} 
+                        movie={movie} 
+                        groupId={group.id} 
+                        onClick={() => setSelectedMovie(movie)}
+                      />
                   ))}
               </div>
           ) : (
@@ -210,6 +217,12 @@ const GroupDetailPage: React.FC = () => {
 
       <InviteModal isOpen={isInviteModalOpen} onClose={() => setInviteModalOpen(false)} inviteCode={group.inviteCode} groupName={group.name} />
       <AddMovieModal isOpen={isAddMovieModalOpen} onClose={() => setAddMovieModalOpen(false)} onAddMovie={handleAddMovie} existingTmdbIds={existingTmdbIds} />
+      {selectedMovie && (
+        <MovieDetailsModal 
+            movie={selectedMovie}
+            onClose={() => setSelectedMovie(null)}
+        />
+      )}
     </>
   );
 };

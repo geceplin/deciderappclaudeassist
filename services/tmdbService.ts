@@ -1,4 +1,4 @@
-import { MovieSearchResult, MovieDetails } from '../types';
+import { MovieSearchResult, MovieDetails, CastMember, CrewMember, Video } from '../types';
 
 const API_KEY = 'ec80894db7608dc7d6bea55e2a6aa650';
 const API_BASE_URL = 'https://api.themoviedb.org/3';
@@ -6,6 +6,7 @@ const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour
 
 const PLACEHOLDER_POSTER = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="500" height="750"%3E%3Crect fill="%232C2C2C" width="500" height="750"/%3E%3Ctext fill="%23666" font-family="sans-serif" font-size="30" text-anchor="middle" x="250" y="375"%3ENo Poster%3C/text%3E%3C/svg%3E';
+const PLACEHOLDER_PROFILE = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="185" height="278"%3E%3Crect fill="%232C2C2C" width="185" height="278"/%3E%3C/svg%3E';
 
 const cache = new Map<string, { data: any, timestamp: number }>();
 
@@ -123,6 +124,55 @@ export const getMovieDetails = async (movieId: number): Promise<MovieDetails> =>
 };
 
 /**
+ * Fetches movie credits (cast and crew).
+ * @param movieId The ID of the movie.
+ * @returns A promise resolving to the cast and director.
+ */
+export const getMovieCredits = async (movieId: number): Promise<{ cast: CastMember[], director: CrewMember | null }> => {
+    console.log(`🔍 Fetching credits for movie ID: ${movieId}`);
+    const cacheKey = `credits-${movieId}`;
+    const data = await _fetchWithCache(cacheKey, () => _fetchFromTMDb(`/movie/${movieId}/credits`));
+    
+    const cast: CastMember[] = data.cast.slice(0, 15).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        character: c.character,
+        profilePath: c.profile_path,
+    }));
+    
+    const director = data.crew.find((c: any) => c.job === 'Director') || null;
+
+    console.log(`✅ Fetched credits for movie ID: ${movieId}`);
+    return { cast, director };
+};
+
+/**
+ * Fetches movie videos (trailers, teasers).
+ * @param movieId The ID of the movie.
+ * @returns A promise resolving to a list of videos.
+ */
+export const getMovieVideos = async (movieId: number): Promise<Video[]> => {
+    console.log(`🔍 Fetching videos for movie ID: ${movieId}`);
+    const cacheKey = `videos-${movieId}`;
+    const data = await _fetchWithCache(cacheKey, () => _fetchFromTMDb(`/movie/${movieId}/videos`));
+    return data.results;
+};
+
+/**
+ * Finds the official trailer URL from a list of videos.
+ * @param videos Array of video objects from TMDb.
+ * @returns The YouTube URL for the trailer, or null.
+ */
+export const getTrailerUrl = (videos: Video[]): string | null => {
+    if (!videos || videos.length === 0) return null;
+    const officialTrailer = videos.find(v => v.type === 'Trailer' && v.site === 'YouTube' && v.official);
+    const anyTrailer = videos.find(v => v.type === 'Trailer' && v.site === 'YouTube');
+    const trailer = officialTrailer || anyTrailer;
+    return trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : null;
+};
+
+
+/**
  * Fetches a list of popular movies.
  * @param page The page number to fetch.
  * @returns A promise that resolves to the list of popular movies.
@@ -166,6 +216,20 @@ export const getPosterUrl = (path: string | null | undefined, size = 'w500'): st
     }
     return `${IMAGE_BASE_URL}${size}${path}`;
 };
+
+/**
+ * Constructs the full URL for an actor's profile image.
+ * @param path The profile path from the TMDb API.
+ * @param size The desired image width.
+ * @returns The full image URL or a placeholder if path is missing.
+ */
+export const getProfileUrl = (path: string | null | undefined, size = 'w185'): string => {
+    if (!path) {
+        return PLACEHOLDER_PROFILE;
+    }
+    return `${IMAGE_BASE_URL}${size}${path}`;
+};
+
 
 /**
  * Constructs the full URL for a movie backdrop image.

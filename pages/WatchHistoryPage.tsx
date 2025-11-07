@@ -60,8 +60,9 @@ const WatchHistoryPage: React.FC = () => {
           if (movie.id === movieId) {
             const newRatings = { ...movie.groupRatings, [user.uid]: rating };
             const allRatings = Object.values(newRatings);
-            // Explicitly type the accumulator 'sum' as a number to resolve a TypeScript inference issue.
-            const newAverage = allRatings.reduce((sum: number, r) => sum + (Number(r) || 0), 0) / allRatings.length;
+            // Fix: Calculate the new average rating, ensuring all values are numeric and guarding against division by zero.
+            const totalRating = allRatings.reduce((sum, r) => sum + (Number(r) || 0), 0);
+            const newAverage = allRatings.length > 0 ? totalRating / allRatings.length : 0;
             return { ...movie, groupRatings: newRatings, averageGroupRating: newAverage };
           }
           return movie;
