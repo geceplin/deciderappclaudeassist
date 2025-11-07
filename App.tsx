@@ -9,6 +9,7 @@ import GroupDetailPage from './pages/GroupDetailPage';
 import JoinGroupPage from './pages/JoinGroupPage';
 import ReelSpinnerPage from './pages/ReelSpinnerPage';
 import WatchHistoryPage from './pages/WatchHistoryPage';
+import ProfilePage from './pages/ProfilePage';
 import { Film } from './components/icons/Icons';
 
 // Placeholder for the landing page
@@ -71,6 +72,14 @@ function App() {
                 <WatchHistoryPage />
               </ProtectedRoute>
             } 
+          />
+          <Route 
+            path="/profile" 
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
           />
         </Routes>
       </HashRouter>

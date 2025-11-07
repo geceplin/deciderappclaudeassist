@@ -50,6 +50,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: user.email,
         displayName: displayName || user.displayName,
         createdAt: serverTimestamp(),
+        bio: '',
+        language: 'en',
       });
     }
   };

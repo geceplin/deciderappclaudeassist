@@ -1,8 +1,20 @@
-import { doc, getDoc, getDocs, collection, query, where, documentId } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, query, where, documentId, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { UserProfile } from '../types';
 
 const USERS = 'users';
+
+export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
+    const userRef = doc(db, USERS, userId);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) return null;
+    return { uid: userSnap.id, ...userSnap.data() } as UserProfile;
+};
+
+export const updateUserProfile = async (userId: string, data: Partial<Omit<UserProfile, 'uid'>>): Promise<void> => {
+    const userRef = doc(db, USERS, userId);
+    await updateDoc(userRef, data);
+};
 
 export const getUsersByIds = async (userIds: string[]): Promise<Map<string, UserProfile>> => {
     const userMap = new Map<string, UserProfile>();

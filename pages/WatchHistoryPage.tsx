@@ -58,10 +58,11 @@ const WatchHistoryPage: React.FC = () => {
       setHistory(prevHistory => 
         prevHistory.map(movie => {
           if (movie.id === movieId) {
-            const newRatings = { ...movie.groupRatings, [user.uid]: rating };
+            // FIX: Guard against movie.groupRatings being undefined and explicitly type `r` to resolve TS error.
+            const newRatings = { ...(movie.groupRatings || {}), [user.uid]: rating };
             const allRatings = Object.values(newRatings);
             // Fix: Calculate the new average rating, ensuring all values are numeric and guarding against division by zero.
-            const totalRating = allRatings.reduce((sum, r) => sum + (Number(r) || 0), 0);
+            const totalRating = allRatings.reduce((sum, r: any) => sum + (Number(r) || 0), 0);
             const newAverage = allRatings.length > 0 ? totalRating / allRatings.length : 0;
             return { ...movie, groupRatings: newRatings, averageGroupRating: newAverage };
           }

@@ -7,12 +7,15 @@ export interface UserProfile {
   displayName: string | null;
   createdAt: Timestamp;
   groupIds?: string[];
+  bio?: string;
+  language?: 'en' | 'es';
 }
 
 export interface Group {
     id: string;
     name:string;
     createdBy: string;
+    ownerId: string;
     createdAt: Timestamp;
     members: string[];
     inviteCode: string;

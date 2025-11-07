@@ -58,6 +58,7 @@ export const createGroup = async (name: string, color: string, userId: string): 
       name,
       color,
       createdBy: userId,
+      ownerId: userId,
       createdAt: serverTimestamp(),
       members: [userId],
       inviteCode,
@@ -251,11 +252,38 @@ export const leaveGroup = async (groupId: string, userId: string): Promise<void>
       if (group.createdBy === userId) {
         updateData.createdBy = group.members.find(id => id !== userId);
       }
+      if (group.ownerId === userId) {
+        updateData.ownerId = group.members.find(id => id !== userId);
+      }
       transaction.update(groupRef, updateData);
     }
     transaction.update(userRef, { groupIds: arrayRemove(groupId) });
   });
 };
+
+export const removeMemberFromGroup = async (groupId: string, memberIdToRemove: string, currentUserId: string): Promise<void> => {
+    const groupRef = doc(db, GROUPS, groupId);
+    const userRef = doc(db, USERS, memberIdToRemove);
+
+    await runTransaction(db, async (transaction) => {
+        const groupDoc = await transaction.get(groupRef);
+        if (!groupDoc.exists()) {
+            throw new Error(mapGroupError('not-found'));
+        }
+        const group = groupDoc.data() as Group;
+
+        if (group.ownerId !== currentUserId) {
+            throw new Error(mapGroupError('permission-denied'));
+        }
+        if (memberIdToRemove === currentUserId) {
+            throw new Error("You cannot remove yourself. Please use 'Leave Group' instead.");
+        }
+
+        transaction.update(groupRef, { members: arrayRemove(memberIdToRemove) });
+        transaction.update(userRef, { groupIds: arrayRemove(groupId) });
+    });
+};
+
 
 // Delete a group (creator only)
 export const deleteGroup = async (groupId: string, userId: string): Promise<void> => {

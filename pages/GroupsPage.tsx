@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { onUserGroupsSnapshot, createGroup } from '../services/groupService';
 import { Group } from '../types';
 import GroupCard from '../components/groups/GroupCard';
 import CreateGroupModal from '../components/groups/CreateGroupModal';
 import InviteModal from '../components/groups/InviteModal';
-import { Film, Plus } from '../components/icons/Icons';
+import { Film, Plus, User } from '../components/icons/Icons';
 
 const GroupCardSkeleton: React.FC = () => (
     <div className="bg-dark-elevated rounded-2xl p-6 h-48 animate-pulse">
@@ -124,9 +125,15 @@ const GroupsPage: React.FC = () => {
             <Film className="w-8 h-8 text-gold" />
             <span className="text-2xl font-bold">DECIDE</span>
           </div>
-          <button onClick={signOut} className="px-4 py-2 text-sm bg-dark-elevated rounded-lg hover:bg-dark-hover">
-            Sign Out
-          </button>
+          <div className="flex items-center gap-2">
+            <Link to="/profile" className="px-4 py-2 text-sm bg-dark-elevated rounded-lg hover:bg-dark-hover flex items-center gap-2">
+              <User className="w-4 h-4" />
+              My Profile
+            </Link>
+            <button onClick={signOut} className="px-4 py-2 text-sm bg-dark-elevated rounded-lg hover:bg-dark-hover">
+              Sign Out
+            </button>
+          </div>
         </header>
 
         <main className="p-4 md:p-8">
