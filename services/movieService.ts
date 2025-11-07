@@ -3,84 +3,99 @@ import {
   doc,
   addDoc,
   updateDoc,
-  getDoc,
   deleteDoc,
   serverTimestamp,
-  arrayUnion,
-  arrayRemove,
   runTransaction,
   onSnapshot,
   Unsubscribe,
   query,
-  orderBy
+  where,
+  getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Movie, MovieSearchResult } from '../types';
+import { Movie, Opinion, MovieDetails } from '../types';
 import * as tmdbService from './tmdbService';
 
 const GROUPS = 'groups';
 const MOVIES = 'movies';
 
 /**
- * Searches for movies using the TMDb service and returns them in the format expected by the app.
- * @param searchQuery The user's search query.
- * @returns A promise that resolves to an array of movie search results.
+ * Calculates the counts of each opinion type from an opinions map.
+ * This function is null-safe and returns zero for all counts if opinions are missing.
+ * @param opinions A map of user IDs to their opinion.
+ * @returns An object with counts for mustWatch, alreadySeen, and pass.
  */
-export const searchMovies = async (searchQuery: string): Promise<MovieSearchResult[]> => {
-    try {
-        const response = await tmdbService.searchMovies(searchQuery);
-        return response.results;
-    } catch (error) {
-        console.error("Error searching movies via tmdbService:", error);
-        // Propagate a user-friendly error message
-        throw new Error("Failed to search for movies. The movie database might be temporarily unavailable.");
-    }
+const calculateOpinionCounts = (opinions: Record<string, Opinion> = {}) => {
+  const values = Object.values(opinions);
+  return {
+    mustWatch: values.filter(o => o === 'must-watch').length,
+    alreadySeen: values.filter(o => o === 'already-seen').length,
+    pass: values.filter(o => o === 'pass').length,
+  };
 };
 
 /**
  * Subscribes to real-time updates for movies within a specific group.
- * @param groupId The ID of the group.
- * @param onUpdate Callback function to handle the updated list of movies.
- * @param onError Callback function to handle errors.
- * @returns An unsubscribe function to detach the listener.
+ * Provides default values for any missing opinion-related fields to prevent UI errors.
  */
 export const onGroupMoviesSnapshot = (
     groupId: string,
     onUpdate: (movies: Movie[]) => void,
     onError: (error: Error) => void
 ): Unsubscribe => {
-    const q = query(collection(db, GROUPS, groupId, MOVIES), orderBy('addedAt', 'desc'));
+    const q = query(collection(db, GROUPS, groupId, MOVIES));
     
     return onSnapshot(q, (snapshot) => {
-        const movies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Movie));
+        const movies = snapshot.docs.map(doc => {
+            const data = doc.data();
+            // Ensure data integrity for the frontend, providing defaults if fields are missing.
+            return {
+                id: doc.id,
+                opinions: {},
+                opinionCounts: { mustWatch: 0, alreadySeen: 0, pass: 0 },
+                watchedTogether: false,
+                ...data,
+            } as Movie;
+        });
         onUpdate(movies);
     }, onError);
 };
 
 /**
- * Adds a new movie suggestion to a group's watchlist.
- * @param groupId The ID of the group.
- * @param movie The movie data to add.
- * @param userId The ID of the user adding the movie.
+ * Adds a new movie to a group, fetching its full details from TMDb first.
+ * Initializes all required fields with safe defaults to ensure data integrity.
  */
-export const addMovieToGroup = async (groupId: string, movie: MovieSearchResult, userId: string): Promise<void> => {
+export const addMovieToGroup = async (groupId: string, movie: MovieDetails, userId: string, userName: string): Promise<void> => {
     const groupRef = doc(db, GROUPS, groupId);
     const moviesColRef = collection(groupRef, MOVIES);
+    const newMovieRef = doc(moviesColRef); // Create a reference to get the ID
 
     await runTransaction(db, async (transaction) => {
         const groupDoc = await transaction.get(groupRef);
-        if (!groupDoc.exists()) {
-            throw new Error("Group not found.");
-        }
+        if (!groupDoc.exists()) throw new Error("Group not found.");
         
-        const { rating, ...movieData } = movie; // Exclude rating from Firestore object
-
-        transaction.set(doc(moviesColRef), {
-            ...movieData,
+        // Prepare a complete and safe movie object for Firestore
+        const movieToAdd: Omit<Movie, 'id'> = {
+            tmdbId: movie.tmdbId,
+            title: movie.title,
+            year: movie.year,
+            overview: movie.overview,
+            posterPath: movie.posterPath,
+            backdropPath: movie.backdropPath,
+            genres: movie.genres,
+            rating: movie.rating,
             addedBy: userId,
-            addedAt: serverTimestamp(),
-            likes: [],
-        });
+            addedByName: userName,
+            addedAt: serverTimestamp() as any, // Cast to any to satisfy type temporarily
+            opinions: { [userId]: 'must-watch' }, // Default creator's opinion
+            opinionCounts: { mustWatch: 1, alreadySeen: 0, pass: 0 },
+            watchedTogether: false,
+            watchedTogetherDate: null,
+            groupRating: null,
+        };
+
+        transaction.set(newMovieRef, movieToAdd);
         
         const newCount = (groupDoc.data().movieCount || 0) + 1;
         transaction.update(groupRef, { 
@@ -91,36 +106,72 @@ export const addMovieToGroup = async (groupId: string, movie: MovieSearchResult,
 };
 
 /**
- * Toggles a user's "like" on a movie.
- * @param groupId The ID of the group containing the movie.
- * @param movieId The ID of the movie to like/unlike.
- * @param userId The ID of the user performing the action.
+ * Sets or removes a user's opinion on a movie and updates the aggregated counts.
  */
-export const toggleMovieLike = async (groupId: string, movieId: string, userId: string): Promise<void> => {
+export const setMovieOpinion = async (groupId: string, movieId: string, userId: string, opinion: Opinion | null): Promise<void> => {
     const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
-    const movieDoc = await getDoc(movieRef);
-    if (!movieDoc.exists()) {
-        throw new Error("Movie not found.");
-    }
-    const movieData = movieDoc.data();
-    if (movieData.likes.includes(userId)) {
-        await updateDoc(movieRef, { likes: arrayRemove(userId) });
-    } else {
-        await updateDoc(movieRef, { likes: arrayUnion(userId) });
-    }
+    
+    await runTransaction(db, async (transaction) => {
+        const movieDoc = await transaction.get(movieRef);
+        if (!movieDoc.exists()) throw new Error("Movie not found.");
+
+        const movieData = movieDoc.data();
+        const currentOpinions = movieData.opinions || {};
+        
+        if (opinion) {
+            currentOpinions[userId] = opinion;
+        } else {
+            delete currentOpinions[userId];
+        }
+
+        const newCounts = calculateOpinionCounts(currentOpinions);
+
+        transaction.update(movieRef, {
+            opinions: currentOpinions,
+            opinionCounts: newCounts
+        });
+    });
 };
 
 /**
- * Removes a movie from a group's watchlist.
- * @param groupId The ID of the group.
- * @param movieId The ID of the movie to remove.
- * @param userId The ID of the user performing the action (must be the one who added it).
+ * Fetches all movies in a group that have not been marked as watched together.
+ * This is used to populate the reel spinner.
+ */
+export const getUnwatchedMoviesForReel = async (groupId: string): Promise<Movie[]> => {
+    const q = query(
+        collection(db, GROUPS, groupId, MOVIES),
+        where('watchedTogether', '==', false)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+        id: doc.id,
+        // Provide defaults to ensure type safety, even if data is malformed
+        opinions: {}, 
+        opinionCounts: { mustWatch: 0, alreadySeen: 0, pass: 0 },
+        watchedTogether: false,
+        ...doc.data()
+    } as Movie));
+};
+
+/**
+ * Marks a movie as "watched together" by the group.
+ */
+export const markWatchedTogether = async (groupId: string, movieId: string): Promise<void> => {
+    const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
+    await updateDoc(movieRef, {
+        watchedTogether: true,
+        watchedTogetherDate: serverTimestamp(),
+    });
+};
+
+/**
+ * Removes a movie from a group's watchlist. Only the user who added it can remove it.
  */
 export const removeMovieFromGroup = async (groupId: string, movieId: string, userId: string): Promise<void> => {
     const groupRef = doc(db, GROUPS, groupId);
     const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
 
-     await runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const groupDoc = await transaction.get(groupRef);
         const movieDoc = await transaction.get(movieRef);
 

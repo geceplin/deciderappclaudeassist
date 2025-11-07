@@ -4,14 +4,16 @@ import { useAuth } from '../hooks/useAuth';
 import { getGroupById, leaveGroup } from '../services/groupService';
 import { onGroupMoviesSnapshot, addMovieToGroup } from '../services/movieService';
 import { getUsersByIds } from '../services/userService';
-import { Group, Movie, UserProfile, MovieSearchResult } from '../types';
+import { Group, Movie, UserProfile, MovieDetails, Opinion } from '../types';
 
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import InviteModal from '../components/groups/InviteModal';
 import AddMovieModal from '../components/movies/AddMovieModal';
 import MovieCard from '../components/movies/MovieCard';
 import Avatar from '../components/common/Avatar';
-import { ChevronLeft, Plus, Film } from '../components/icons/Icons';
+import { ChevronLeft, Plus, Film, Ticket } from '../components/icons/Icons';
+
+type OpinionFilter = 'all' | Opinion;
 
 const GroupDetailPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
@@ -23,189 +25,163 @@ const GroupDetailPage: React.FC = () => {
   const [members, setMembers] = useState<Map<string, UserProfile>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [filter, setFilter] = useState<OpinionFilter>('all');
 
   const [isInviteModalOpen, setInviteModalOpen] = useState(false);
   const [isAddMovieModalOpen, setAddMovieModalOpen] = useState(false);
 
-  // Fetch group details
   useEffect(() => {
-    if (!groupId) {
-      navigate('/groups');
-      return;
-    }
+    if (!groupId) { navigate('/groups'); return; }
     const fetchGroup = async () => {
       setLoading(true);
       try {
         const groupData = await getGroupById(groupId);
         if (groupData) {
-          // Check if current user is a member
           if (!user || !groupData.members.includes(user.uid)) {
-            setError("You are not a member of this group.");
+            setError("Access denied. You are not a member of this group.");
           } else {
             setGroup(groupData);
           }
-        } else {
-          setError("Group not found.");
-        }
-      } catch (err) {
-        setError("Failed to fetch group details.");
-      } finally {
-        setLoading(false);
-      }
+        } else { setError("Group not found."); }
+      } catch (err) { setError("Failed to fetch group details."); }
+      finally { setLoading(false); }
     };
     fetchGroup();
   }, [groupId, navigate, user]);
   
-  // Set up real-time listener for movies
   useEffect(() => {
     if (!groupId) return;
     const unsubscribe = onGroupMoviesSnapshot(
       groupId,
-      (newMovies) => {
-        setMovies(newMovies);
-        setError('');
-      },
-      (err) => {
-        console.error("Movie snapshot error: ", err);
-        setError("Could not load movies.");
-      }
+      (newMovies) => { setMovies(newMovies); setError(''); },
+      (err) => { console.error("Movie snapshot error: ", err); setError("Could not load movies."); }
     );
     return () => unsubscribe();
   }, [groupId]);
 
-  // Memoize all unique user IDs from group members and movie adders
   const allUserIds = useMemo(() => {
     const userIds = new Set<string>();
-    if (group) {
-      group.members.forEach(id => userIds.add(id));
-    }
+    if (group) { group.members.forEach(id => userIds.add(id)); }
     movies.forEach(movie => userIds.add(movie.addedBy));
     return Array.from(userIds);
   }, [group, movies]);
   
-  // Fetch profiles for all unique users
   useEffect(() => {
     if (allUserIds.length === 0) return;
-    const fetchMembers = async () => {
-        const usersMap = await getUsersByIds(allUserIds);
-        setMembers(usersMap);
-    };
-    fetchMembers();
+    getUsersByIds(allUserIds).then(setMembers);
   }, [allUserIds]);
 
   const handleLeaveGroup = async () => {
     if (!groupId || !user) return;
-    if (window.confirm("Are you sure you want to leave this group? This action cannot be undone.")) {
+    if (window.confirm("Are you sure you want to leave this group?")) {
       try {
         await leaveGroup(groupId, user.uid);
         navigate('/groups');
-      } catch (err: any) {
-        setError(err.message);
-      }
+      } catch (err: any) { setError(err.message); }
     }
   };
 
-  const handleAddMovie = async (movie: MovieSearchResult) => {
+  const handleAddMovie = async (movie: MovieDetails) => {
     if (!user || !groupId) return;
     try {
-        await addMovieToGroup(groupId, movie, user.uid);
+      await addMovieToGroup(groupId, movie, user.uid, user.displayName || 'Anonymous');
     } catch (err: any) {
-        console.error("Failed to add movie:", err);
-        // Re-throw to allow modal to handle UI feedback
-        throw err;
+      console.error("Failed to add movie:", err);
+      throw err; // Re-throw for modal to handle
     }
   };
 
-  const sortedMovies = useMemo(() => {
-    return [...movies].sort((a, b) => {
-      // Primary sort: number of likes (descending)
-      const likeDiff = b.likes.length - a.likes.length;
-      if (likeDiff !== 0) return likeDiff;
-      // Secondary sort: added date (descending - newest first)
-      return (b.addedAt?.toMillis() || 0) - (a.addedAt?.toMillis() || 0);
+  const filteredMovies = useMemo(() => {
+    if (filter === 'all') {
+      return movies.sort((a, b) => (b.addedAt?.toMillis() || 0) - (a.addedAt?.toMillis() || 0));
+    }
+    return movies.filter(movie => {
+      // Null-safe check on opinionCounts
+      const counts = movie.opinionCounts || { mustWatch: 0, alreadySeen: 0, pass: 0 };
+      if (filter === 'must-watch') return (counts.mustWatch ?? 0) > 0;
+      if (filter === 'already-seen') return (counts.alreadySeen ?? 0) > 0;
+      if (filter === 'pass') return (counts.pass ?? 0) > 0;
+      return false;
     });
-  }, [movies]);
+  }, [movies, filter]);
   
-  const existingTmdbIds = useMemo(() => movies.map(m => m.tmdbId).filter(Boolean), [movies]);
-
+  const existingTmdbIds = useMemo(() => movies.map(m => m.tmdbId), [movies]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <div className="min-h-screen bg-dark flex items-center justify-center text-cinema-red p-4 text-center">{error}</div>;
   if (!group) return <div className="min-h-screen bg-dark flex items-center justify-center">Group not found.</div>;
 
+  const FilterButton: React.FC<{ value: OpinionFilter, label: string, emoji: string }> = ({ value, label, emoji }) => (
+    <button
+      onClick={() => setFilter(value)}
+      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+        filter === value ? 'bg-gold text-dark' : 'bg-dark-elevated text-gray-300 hover:bg-dark-hover'
+      }`}
+    >
+      <span className="mr-2">{emoji}</span>
+      {label}
+    </button>
+  );
+
   return (
     <>
       <div className="min-h-screen bg-dark text-white">
-        <header className="p-4 md:px-8 flex items-center">
-          <Link to="/groups" className="p-2 rounded-full hover:bg-dark-elevated transition-colors" aria-label="Back to groups">
-            <ChevronLeft className="w-6 h-6" />
-          </Link>
-          <div className="flex items-center ml-4">
-            <div className="w-5 h-5 rounded-full flex-shrink-0" style={{ backgroundColor: group.color }}></div>
-            <h1 className="text-3xl font-bold ml-3 truncate">{group.name}</h1>
+        <header className="p-4 md:px-8 flex items-center justify-between">
+          <div className="flex items-center">
+            <Link to="/groups" className="p-2 rounded-full hover:bg-dark-elevated" aria-label="Back to groups">
+              <ChevronLeft className="w-6 h-6" />
+            </Link>
+            <div className="w-5 h-5 rounded-full ml-4" style={{ backgroundColor: group.color }}></div>
+            <h1 className="text-2xl md:text-3xl font-bold ml-3 truncate">{group.name}</h1>
           </div>
+          <button
+            onClick={() => navigate(`/groups/${groupId}/spin`)}
+            className="flex items-center space-x-2 px-4 py-2 bg-gold text-dark font-bold rounded-lg shadow-lg hover:bg-gold-light transform hover:scale-105 transition-transform"
+          >
+            <Ticket className="w-5 h-5" />
+            <span>Spin Reel</span>
+          </button>
         </header>
 
         <main className="p-4 md:p-8 max-w-7xl mx-auto">
-          {/* Members Section */}
-          <section className="mb-8">
-            <h2 className="text-xl font-bold mb-4">Members ({group.members.length})</h2>
-            <div className="flex flex-wrap gap-4">
-              {group.members.map(memberId => (
-                  <div key={memberId} className="flex items-center space-x-2 bg-dark-elevated p-2 rounded-full">
-                      <Avatar name={members.get(memberId)?.displayName} size="sm" />
-                      <span className="text-sm font-medium pr-2">{members.get(memberId)?.displayName || '...'}</span>
-                  </div>
-              ))}
+          <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
+             <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                <FilterButton value="all" label="All" emoji="🎬" />
+                <FilterButton value="must-watch" label="Must Watch" emoji="🌟" />
+                <FilterButton value="already-seen" label="Seen" emoji="✅" />
+                <FilterButton value="pass" label="Pass" emoji="👎" />
             </div>
-          </section>
-
-          {/* Movies Section */}
-          <section>
-             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Movie Watchlist ({movies.length})</h2>
-                <button
-                    onClick={() => setAddMovieModalOpen(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gold text-dark font-bold rounded-lg shadow-lg hover:bg-gold-light transition-transform transform hover:scale-105"
-                >
-                    <Plus className="w-5 h-5" />
-                    <span>Add Movie</span>
-                </button>
-            </div>
+            <button
+                onClick={() => setAddMovieModalOpen(true)}
+                className="flex items-center justify-center space-x-2 w-full md:w-auto px-4 py-3 bg-dark-elevated text-white font-bold rounded-lg hover:bg-dark-hover transition-colors"
+            >
+                <Plus className="w-5 h-5" />
+                <span>Add Movie</span>
+            </button>
+          </div>
             
-            {movies.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                    {sortedMovies.map(movie => (
-                        <MovieCard 
-                            key={movie.id}
-                            movie={movie}
-                            groupId={group.id}
-                            addedBy={members.get(movie.addedBy)}
-                        />
-                    ))}
-                </div>
-            ) : (
-                <div className="text-center p-12 bg-dark-elevated rounded-2xl border-2 border-dashed border-gray-700">
-                    <Film className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                    <h3 className="text-xl font-bold text-white">Your Watchlist is Empty</h3>
-                    <p className="text-gray-400 mt-2">Be the first to add a movie suggestion!</p>
-                </div>
-            )}
-          </section>
+          {filteredMovies.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {filteredMovies.map(movie => (
+                      <MovieCard key={movie.id} movie={movie} groupId={group.id} />
+                  ))}
+              </div>
+          ) : (
+              <div className="text-center p-12 bg-dark-elevated rounded-2xl border-2 border-dashed border-gray-700">
+                  <Film className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-white">No Movies Found</h3>
+                  <p className="text-gray-400 mt-2">
+                    {filter === 'all' ? 'Your watchlist is empty. Add a movie to get started!' : `No movies match the "${filter}" filter.`}
+                  </p>
+              </div>
+          )}
 
-          {/* Actions Section */}
-          <section className="mt-12 text-center">
+          <section className="mt-16 text-center">
              <div className="flex flex-col md:flex-row items-center justify-center gap-4">
-                <button
-                    onClick={() => setInviteModalOpen(true)}
-                    className="w-full md:w-auto px-8 py-3 bg-dark-elevated text-white font-bold rounded-lg hover:bg-dark-hover"
-                >
+                <button onClick={() => setInviteModalOpen(true)} className="w-full md:w-auto px-8 py-3 bg-dark-elevated text-white font-bold rounded-lg hover:bg-dark-hover">
                     Invite Friends
                 </button>
-                 <button
-                    onClick={handleLeaveGroup}
-                    className="w-full md:w-auto px-6 py-2 text-cinema-red hover:underline"
-                >
+                 <button onClick={handleLeaveGroup} className="w-full md:w-auto px-6 py-2 text-cinema-red hover:underline">
                     Leave Group
                 </button>
             </div>
@@ -213,18 +189,8 @@ const GroupDetailPage: React.FC = () => {
         </main>
       </div>
 
-      <InviteModal
-        isOpen={isInviteModalOpen}
-        onClose={() => setInviteModalOpen(false)}
-        inviteCode={group.inviteCode}
-        groupName={group.name}
-      />
-      <AddMovieModal
-        isOpen={isAddMovieModalOpen}
-        onClose={() => setAddMovieModalOpen(false)}
-        onAddMovie={handleAddMovie}
-        existingTmdbIds={existingTmdbIds}
-      />
+      <InviteModal isOpen={isInviteModalOpen} onClose={() => setInviteModalOpen(false)} inviteCode={group.inviteCode} groupName={group.name} />
+      <AddMovieModal isOpen={isAddMovieModalOpen} onClose={() => setAddMovieModalOpen(false)} onAddMovie={handleAddMovie} existingTmdbIds={existingTmdbIds} />
     </>
   );
 };

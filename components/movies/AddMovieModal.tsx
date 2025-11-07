@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as tmdbService from '../../services/tmdbService';
-import { MovieSearchResult } from '../../types';
+import { MovieDetails } from '../../types';
 import { X, Search, Loader2 } from '../icons/Icons';
 import { useDebounce } from '../../hooks/useDebounce';
 
 interface MovieSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddMovie: (movie: MovieSearchResult) => Promise<void>;
+  onAddMovie: (movie: MovieDetails) => Promise<void>;
   existingTmdbIds: number[];
 }
 
 const MovieResultCard: React.FC<{
-  movie: MovieSearchResult;
+  movie: MovieDetails;
   onAdd: () => void;
   isAdding: boolean;
   isAdded: boolean;
@@ -65,8 +65,8 @@ const MovieResultCard: React.FC<{
 const AddMovieModal: React.FC<MovieSearchModalProps> = ({ isOpen, onClose, onAddMovie, existingTmdbIds }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const debouncedSearch = useDebounce(searchQuery, 300);
-    const [popularMovies, setPopularMovies] = useState<MovieSearchResult[]>([]);
-    const [searchResults, setSearchResults] = useState<MovieSearchResult[]>([]);
+    const [popularMovies, setPopularMovies] = useState<MovieDetails[]>([]);
+    const [searchResults, setSearchResults] = useState<MovieDetails[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState<'popular' | 'search'>('popular');
@@ -81,7 +81,9 @@ const AddMovieModal: React.FC<MovieSearchModalProps> = ({ isOpen, onClose, onAdd
                     setLoading(true);
                     try {
                         const data = await tmdbService.getPopularMovies();
-                        setPopularMovies(data.results.slice(0, 12));
+                        // Fetch full details for popular movies to get genres etc.
+                        const detailedMovies = await Promise.all(data.results.slice(0, 12).map(m => tmdbService.getMovieDetails(m.tmdbId)));
+                        setPopularMovies(detailedMovies);
                     } catch (err) {
                         setError('Failed to load popular movies.');
                     }
@@ -89,15 +91,12 @@ const AddMovieModal: React.FC<MovieSearchModalProps> = ({ isOpen, onClose, onAdd
                 };
                 loadPopular();
             }
-            // Auto-focus the input
             setTimeout(() => inputRef.current?.focus(), 100);
         } else {
             document.body.style.overflow = '';
         }
 
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
-        };
+        const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', handleKeyDown);
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
@@ -113,7 +112,8 @@ const AddMovieModal: React.FC<MovieSearchModalProps> = ({ isOpen, onClose, onAdd
             const search = async () => {
                 try {
                     const data = await tmdbService.searchMovies(debouncedSearch);
-                    setSearchResults(data.results.slice(0, 20));
+                    const detailedMovies = await Promise.all(data.results.slice(0, 20).map(m => tmdbService.getMovieDetails(m.tmdbId)));
+                    setSearchResults(detailedMovies);
                 } catch (err) {
                     setError('Failed to fetch search results.');
                 }
@@ -126,7 +126,7 @@ const AddMovieModal: React.FC<MovieSearchModalProps> = ({ isOpen, onClose, onAdd
         }
     }, [debouncedSearch]);
     
-    const handleAddMovie = async (movie: MovieSearchResult) => {
+    const handleAddMovie = async (movie: MovieDetails) => {
         setAddingMovieId(movie.tmdbId);
         try {
             await onAddMovie(movie);

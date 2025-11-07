@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { HashRouter, Routes, Route, Link } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
@@ -8,6 +7,7 @@ import SignUp from './pages/SignUp';
 import GroupsPage from './pages/GroupsPage';
 import GroupDetailPage from './pages/GroupDetailPage';
 import JoinGroupPage from './pages/JoinGroupPage';
+import ReelSpinnerPage from './pages/ReelSpinnerPage';
 import { Film } from './components/icons/Icons';
 
 // Placeholder for the landing page
@@ -52,6 +52,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <GroupDetailPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/groups/:groupId/spin" 
+            element={
+              <ProtectedRoute>
+                <ReelSpinnerPage />
               </ProtectedRoute>
             } 
           />

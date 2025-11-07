@@ -1,4 +1,4 @@
-import { MovieSearchResult } from '../types';
+import { MovieSearchResult, MovieDetails } from '../types';
 
 const API_KEY = 'ec80894db7608dc7d6bea55e2a6aa650';
 const API_BASE_URL = 'https://api.themoviedb.org/3';
@@ -72,6 +72,17 @@ const mapToMovieSearchResult = (tmdbMovie: any): MovieSearchResult => ({
 });
 
 /**
+ * Maps a movie object from the TMDb API to our internal MovieDetails type.
+ * @param tmdbMovie The raw movie object from TMDb.
+ * @returns A MovieDetails object.
+ */
+const mapToMovieDetails = (tmdbMovie: any): MovieDetails => ({
+    ...mapToMovieSearchResult(tmdbMovie),
+    backdropPath: tmdbMovie.backdrop_path,
+    genres: tmdbMovie.genres ? tmdbMovie.genres.map((g: { name: string }) => g.name) : [],
+});
+
+/**
  * Searches for movies on TMDb.
  * @param query The search query.
  * @param page The page number to fetch.
@@ -103,12 +114,12 @@ export const searchMovies = async (query: string, page = 1): Promise<{ results: 
  * @param movieId The ID of the movie to fetch.
  * @returns A promise that resolves to the movie details.
  */
-export const getMovieDetails = async (movieId: number) => {
+export const getMovieDetails = async (movieId: number): Promise<MovieDetails> => {
     console.log(`🔍 Fetching details for movie ID: ${movieId}`);
     const cacheKey = `movie-${movieId}`;
     const data = await _fetchWithCache(cacheKey, () => _fetchFromTMDb(`/movie/${movieId}`, { language: 'en-US' }));
     console.log(`✅ Fetched details for "${data.title}"`);
-    return data;
+    return mapToMovieDetails(data);
 };
 
 /**
@@ -132,12 +143,15 @@ export const getPopularMovies = async (page = 1): Promise<{ results: MovieSearch
  * @param timeWindow The time window for trending ('day' or 'week').
  * @returns A promise that resolves to the list of trending movies.
  */
-export const getTrendingMovies = async (timeWindow: 'day' | 'week' = 'week') => {
+export const getTrendingMovies = async (timeWindow: 'day' | 'week' = 'week'): Promise<{ results: MovieSearchResult[], total_results: number }> => {
     console.log(`🔍 Fetching trending movies for the ${timeWindow}`);
     const cacheKey = `trending-${timeWindow}`;
     const data = await _fetchWithCache(cacheKey, () => _fetchFromTMDb(`/trending/movie/${timeWindow}`, { language: 'en-US' }));
     console.log(`✅ Fetched ${data.results.length} trending movies`);
-    return data;
+    return {
+      ...data,
+      results: data.results.map(mapToMovieSearchResult)
+    };
 };
 
 /**
@@ -161,7 +175,8 @@ export const getPosterUrl = (path: string | null | undefined, size = 'w500'): st
  */
 export const getBackdropUrl = (path: string | null | undefined, size = 'w1280'): string => {
     if (!path) {
-        return PLACEHOLDER_POSTER; // Can be a different placeholder if desired
+        // You might want a different, landscape placeholder for backdrops
+        return PLACEHOLDER_POSTER;
     }
     return `${IMAGE_BASE_URL}${size}${path}`;
 };
