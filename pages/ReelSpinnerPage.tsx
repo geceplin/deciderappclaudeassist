@@ -1,119 +1,154 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import { getUnwatchedMoviesForReel } from '../services/movieService';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { getUnwatchedMoviesForReel, markWatchedTogether } from '../services/movieService';
 import { Movie } from '../types';
-import { ChevronLeft } from '../components/icons/Icons';
+import { useRoulette } from '../hooks/useRoulette';
+import { filterEligibleMovies } from '../utils/spinLogic';
+import { ChevronLeft, Loader2, Film } from '../components/icons/Icons';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-
-type ReelFilter = 'all' | 'must-watch' | 'must-watch-seen' | 'must-watch-pass';
+import MovieReel from '../components/roulette/MovieReel';
+import ResultModal from '../components/roulette/ResultModal';
 
 const ReelSpinnerPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
-  const { user } = useAuth();
-  const [allMovies, setAllMovies] = useState<Movie[]>([]);
+  const navigate = useNavigate();
+  const [allUnwatchedMovies, setAllUnwatchedMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [reelFilter, setReelFilter] = useState<ReelFilter>('must-watch');
+  const [showResultModal, setShowResultModal] = useState(false);
+
+  const { isSpinning, result, spin, reset } = useRoulette();
 
   useEffect(() => {
     if (!groupId) return;
-    const fetchReelMovies = async () => {
+    const fetchMovies = async () => {
       setLoading(true);
       setError('');
       try {
         const movies = await getUnwatchedMoviesForReel(groupId);
-        setAllMovies(movies);
+        setAllUnwatchedMovies(movies);
       } catch (err) {
-        console.error("Failed to fetch reel movies:", err);
         setError("Could not load movies for the reel.");
       } finally {
         setLoading(false);
       }
     };
-    fetchReelMovies();
+    fetchMovies();
   }, [groupId]);
 
-  const eligibleMovies = useMemo(() => {
-    if (!user) return [];
-    return allMovies.filter(movie => {
-        // Safe access to opinion data
-        const counts = movie.opinionCounts || { mustWatch: 0, alreadySeen: 0, pass: 0 };
-        const userOpinion = movie.opinions?.[user.uid];
+  const eligibleMovies = useMemo(() => filterEligibleMovies(allUnwatchedMovies), [allUnwatchedMovies]);
 
-        // User's "pass" opinion always excludes the movie
-        if (userOpinion === 'pass') return false;
+  const handleSpin = async () => {
+    const winner = await spin(eligibleMovies);
+    setTimeout(() => {
+        setShowResultModal(true);
+    }, 500); // Small delay after spin stops to show result
+  };
 
-        switch (reelFilter) {
-            case 'must-watch':
-                return (counts.mustWatch ?? 0) > 0;
-            case 'must-watch-seen':
-                return userOpinion !== 'already-seen' && ((counts.mustWatch ?? 0) > 0 || (counts.alreadySeen ?? 0) > 0);
-            case 'must-watch-pass':
-                return (counts.mustWatch ?? 0) > 0 || (counts.pass ?? 0) > 0;
-            case 'all':
-                return true;
-            default:
-                return true;
-        }
-    });
-  }, [allMovies, reelFilter, user]);
+  const handleMarkWatched = async (movieId: string) => {
+    if (!groupId) return;
+    await markWatchedTogether(groupId, movieId);
+    // Refresh movie list
+    setAllUnwatchedMovies(prev => prev.filter(m => m.id !== movieId));
+    setShowResultModal(false);
+    reset();
+  };
 
-  if (loading) return <LoadingSpinner />;
-  if (error) return <div className="min-h-screen bg-dark flex items-center justify-center text-cinema-red">{error}</div>;
+  const handleSpinAgain = () => {
+    setShowResultModal(false);
+    reset();
+    handleSpin();
+  };
+  
+  const handleCloseModal = () => {
+    setShowResultModal(false);
+    reset();
+  };
 
-  const FilterButton: React.FC<{ value: ReelFilter, label: string, emoji: string }> = ({ value, label, emoji }) => (
-    <button
-      onClick={() => setReelFilter(value)}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-        reelFilter === value ? 'bg-gold text-dark' : 'bg-dark-elevated text-gray-300 hover:bg-dark-hover'
-      }`}
-    >
-      <span className="mr-2">{emoji}</span>
-      {label}
-    </button>
-  );
+  const renderContent = () => {
+    if (loading) return <LoadingSpinner />;
+    if (error) return <div className="text-center text-cinema-red">{error}</div>;
+
+    if (allUnwatchedMovies.length > 0 && eligibleMovies.length < 2) {
+      return (
+        <div className="text-center">
+            <Film className="w-16 h-16 text-gray-700 mx-auto" />
+            <h3 className="text-xl font-bold mt-4">Not enough movies to spin!</h3>
+            <p className="text-gray-400 mt-2">
+                At least two movies need more 'Must Watch' votes than 'Pass' votes.
+            </p>
+            <Link to={`/groups/${groupId}`} className="mt-6 inline-block px-6 py-3 bg-gold text-dark font-bold rounded-lg">
+                Back to Group
+            </Link>
+        </div>
+      );
+    }
+    
+    if (allUnwatchedMovies.length === 0) {
+       return (
+        <div className="text-center">
+            <Film className="w-16 h-16 text-gray-700 mx-auto" />
+            <h3 className="text-xl font-bold mt-4">You've watched everything!</h3>
+            <p className="text-gray-400 mt-2">
+                Add some new movies to the group to spin the reel.
+            </p>
+            <Link to={`/groups/${groupId}`} className="mt-6 inline-block px-6 py-3 bg-gold text-dark font-bold rounded-lg">
+                Add Movies
+            </Link>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full flex flex-col items-center justify-center gap-8">
+        <MovieReel
+          movies={eligibleMovies}
+          rotation={result?.finalRotation ?? 0}
+          isSpinning={isSpinning}
+          result={result?.movie ?? null}
+        />
+        <button
+          onClick={handleSpin}
+          disabled={isSpinning || eligibleMovies.length < 2}
+          className="w-full max-w-xs h-16 flex items-center justify-center bg-gold text-dark font-bold text-xl rounded-lg shadow-lg hover:bg-gold-light disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed transform hover:scale-105 transition-all"
+        >
+          {isSpinning ? (
+            <><Loader2 className="w-6 h-6 animate-spin mr-3" /> Spinning...</>
+          ) : (
+            '🎡 SPIN TO DECIDE!'
+          )}
+        </button>
+      </div>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-dark text-white flex flex-col">
-      <header className="p-4 md:px-8 flex items-center">
-        <Link to={`/groups/${groupId}`} className="p-2 rounded-full hover:bg-dark-elevated" aria-label="Back to group">
-          <ChevronLeft className="w-6 h-6" />
-        </Link>
-        <h1 className="text-3xl font-bold ml-4">Reel Spinner</h1>
-      </header>
-
-      <main className="flex-grow flex flex-col items-center justify-center p-4 text-center">
-        <div className="w-full max-w-2xl">
-          <h2 className="text-xl font-semibold text-gray-300">Reel Filter</h2>
-          <div className="flex flex-wrap justify-center gap-2 my-4">
-            <FilterButton value="must-watch" label="Must Watch" emoji="🌟" />
-            <FilterButton value="must-watch-seen" label="Must + Seen" emoji="🌟✅" />
-            <FilterButton value="all" label="All Movies" emoji="🎬" />
+    <>
+      <div className="min-h-screen bg-dark text-white flex flex-col">
+        <header className="p-4 md:px-8 flex items-center justify-between">
+          <Link to={`/groups/${groupId}`} className="p-2 rounded-full hover:bg-dark-elevated" aria-label="Back to group">
+            <ChevronLeft className="w-6 h-6" />
+          </Link>
+          <div className="text-center">
+              <h1 className="text-3xl font-bold">Reel Spinner</h1>
+              <p className="text-gold font-semibold">{eligibleMovies.length} movies in the reel</p>
           </div>
-          
-          <p className="text-lg text-gray-400 mt-6">
-            <span className="text-4xl font-bold text-gold">{eligibleMovies.length}</span>
-            <br/>
-            {eligibleMovies.length === 1 ? 'movie' : 'movies'} in the reel
-          </p>
+          <div className="w-10"></div> {/* Spacer */}
+        </header>
 
-          <div className="my-12 w-full h-64 bg-dark-elevated rounded-2xl border-4 border-dashed border-gray-700 flex items-center justify-center">
-            <span className="text-gray-500 font-semibold text-2xl">Reel Spinner Coming Soon!</span>
-          </div>
+        <main className="flex-grow flex flex-col items-center justify-center p-4">
+          {renderContent()}
+        </main>
+      </div>
 
-          <button 
-            disabled={eligibleMovies.length === 0}
-            className="w-full max-w-xs h-16 bg-gold text-dark font-bold text-xl rounded-lg shadow-lg hover:bg-gold-light disabled:bg-gray-600 disabled:cursor-not-allowed transform hover:scale-105 transition-transform"
-          >
-            SPIN TO DECIDE!
-          </button>
-          {eligibleMovies.length === 0 && (
-            <p className="text-sm text-gray-500 mt-4">Add more movies or change filters to spin.</p>
-          )}
-        </div>
-      </main>
-    </div>
+      <ResultModal
+        isOpen={showResultModal && !!result}
+        movie={result?.movie ?? null}
+        onClose={handleCloseModal}
+        onMarkWatched={handleMarkWatched}
+        onSpinAgain={handleSpinAgain}
+      />
+    </>
   );
 };
 
