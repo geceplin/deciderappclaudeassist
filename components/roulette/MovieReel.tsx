@@ -1,87 +1,59 @@
 import React from 'react';
 import { Movie } from '../../types';
 import { getPosterUrl } from '../../services/tmdbService';
-import { Film } from '../icons/Icons';
 
 interface MovieReelProps {
-  movies: Movie[];
-  rotation: number;
+  items: Movie[];
+  targetIndex: number;
   isSpinning: boolean;
-  result: Movie | null;
+  spinDuration: number;
 }
 
-const MovieReel: React.FC<MovieReelProps> = ({ movies, rotation, isSpinning, result }) => {
-  const reelSize = 500; // The diameter of the main reel in px
-  const posterSize = { width: 80, height: 120 };
-  const radius = (reelSize / 2) - (posterSize.height / 2) - 24; // 24 is rim width
+const ITEM_WIDTH = 160; // Corresponds to w-40
+const GAP = 16; // Corresponds to gap-4
+const TOTAL_ITEM_WIDTH = ITEM_WIDTH + GAP;
+
+const MovieReel: React.FC<MovieReelProps> = ({ items, targetIndex, isSpinning, spinDuration }) => {
+  // Calculate the offset to center the target item
+  // We want the target item's center to align with the reel's center
+  const reelOffset = `calc(50% - ${ITEM_WIDTH / 2}px)`;
+  
+  // Calculate the total translation distance
+  // The 'jitter' adds a small random amount to make the landing spot less predictable
+  const jitter = (Math.random() - 0.5) * (ITEM_WIDTH * 0.6);
+  const translation = targetIndex * TOTAL_ITEM_WIDTH + jitter;
 
   return (
-    <div className="relative flex items-center justify-center scale-75 sm:scale-100">
-      <div 
-        className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-transform duration-300 ${isSpinning ? 'scale-105' : 'scale-100'}`}
-        style={{ width: `${reelSize}px`, height: `${reelSize}px` }}
-      >
-        <div 
-          className="w-full h-full rounded-full border-[24px] border-gold bg-dark-elevated shadow-gold-glow relative"
-        >
-          {/* Film Strip Container */}
-          <div
-            className="w-full h-full"
-            style={{
-              transform: `rotate(${rotation}deg)`,
-              transition: isSpinning ? 'transform 5s cubic-bezier(0.25, 1, 0.5, 1)' : 'none',
-              filter: isSpinning ? 'blur(3px)' : 'blur(0px)',
-            }}
-          >
-            {movies.map((movie, index) => {
-              const angle = (360 / movies.length) * index;
-              const isWinner = result?.id === movie.id && !isSpinning;
-              const transform = `
-                rotate(${angle}deg) 
-                translateY(-${radius}px) 
-                rotate(-${angle}deg)
-                scale(${isWinner ? 1.25 : 1})
-              `;
+    <div className="relative w-full h-64 overflow-hidden">
+      {/* Center Marker */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-full bg-gold rounded-full z-20 shadow-lg"></div>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-full bg-gradient-to-t from-transparent via-gold/30 to-transparent z-10"></div>
+      
+      {/* Fades */}
+      <div className="absolute left-0 top-0 w-1/4 h-full bg-gradient-to-r from-dark to-transparent z-20"></div>
+      <div className="absolute right-0 top-0 w-1/4 h-full bg-gradient-to-l from-dark to-transparent z-20"></div>
 
-              return (
-                <div
-                  key={movie.id}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 origin-center transition-transform duration-500"
-                  style={{ 
-                    width: `${posterSize.width}px`, 
-                    height: `${posterSize.height}px`, 
-                    transform,
-                    zIndex: isWinner ? 10 : 1,
-                  }}
-                >
-                  <img
-                    src={getPosterUrl(movie.posterPath, 'w185')}
-                    alt={movie.title}
-                    className={`w-full h-full object-cover rounded-sm border-2 ${isWinner ? 'border-gold' : 'border-white/50'}`}
-                  />
-                </div>
-              );
-            })}
-          </div>
-          {/* Center Hub */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-dark rounded-full flex flex-col items-center justify-center border-4 border-gold-dark">
-            <Film className="w-10 h-10 text-gold" />
-            <span className="text-xs text-gray-400 mt-1 font-bold">DECIDE</span>
-          </div>
-        </div>
-      </div>
-       {/* Selector Pointer */}
-      <div 
-        className="absolute -top-4 left-1/2 -translate-x-1/2 z-20"
+      <div
+        className="flex items-center h-full gap-4"
         style={{
-            width: 0,
-            height: 0,
-            borderLeft: '16px solid transparent',
-            borderRight: '16px solid transparent',
-            borderTop: '24px solid white',
-            filter: 'drop-shadow(0 -2px 4px rgba(255,195,0,0.7))'
+          transform: isSpinning
+            ? `translateX(calc(${reelOffset} - ${translation}px))`
+            : `translateX(${reelOffset})`,
+          transition: `transform ${spinDuration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`,
         }}
-      />
+      >
+        {items.map((movie, index) => (
+          <div key={`${movie.id}-${index}`} className="flex-shrink-0 w-40 h-60 rounded-xl overflow-hidden shadow-lg">
+            <img
+              src={getPosterUrl(movie.posterPath, 'w342')}
+              alt={movie.title}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={(e) => { (e.target as HTMLImageElement).src = getPosterUrl(null); }}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

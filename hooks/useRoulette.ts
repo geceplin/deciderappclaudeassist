@@ -1,69 +1,78 @@
-import { useState, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Movie } from '../types';
 import { selectWinner } from '../utils/spinLogic';
 
-const SPIN_DURATION_MS = 5000; // 5 seconds for the full animation
+const REEL_LENGTH = 50; // Total number of items in the visual reel
+const SPIN_DURATION_MS = 5000; // Duration of the spin animation
 
-export interface RouletteResult {
-  movie: Movie;
-  finalRotation: number;
-}
-
-export const useRoulette = () => {
+export const useRoulette = (eligibleMovies: Movie[]) => {
   const [isSpinning, setIsSpinning] = useState(false);
-  const [result, setResult] = useState<RouletteResult | null>(null);
+  const [winner, setWinner] = useState<Movie | null>(null);
+  const [spinTargetIndex, setSpinTargetIndex] = useState(0);
 
-  const spin = useCallback((movies: Movie[]): Promise<Movie> => {
-    return new Promise((resolve) => {
-      if (isSpinning || movies.length < 2) {
-        // This case should be handled by disabling the button, but as a safeguard.
-        return;
-      }
+  const reelItems = useMemo(() => {
+    if (eligibleMovies.length === 0) return [];
+    
+    // Create a long list of movies for the reel by repeating the eligible list
+    const items = [];
+    for (let i = 0; i < REEL_LENGTH; i++) {
+      items.push(eligibleMovies[i % eligibleMovies.length]);
+    }
+    return items;
+  }, [eligibleMovies]);
 
-      setIsSpinning(true);
-      setResult(null);
+  const startSpin = useCallback(() => {
+    if (isSpinning || eligibleMovies.length === 0) return;
 
-      const winner = selectWinner(movies);
-      if (!winner) {
-          setIsSpinning(false);
-          return;
-      };
+    setIsSpinning(true);
+    setWinner(null);
 
-      const winnerIndex = movies.findIndex(m => m.id === winner.id);
-      
-      // --- Calculate Final Rotation ---
-      // 1. Base Rotations: Add 5-7 full spins for visual effect.
-      const fullSpins = 5 + Math.floor(Math.random() * 3);
-      const baseRotation = 360 * fullSpins;
-
-      // 2. Segment Angle: The angle for each movie slot on the reel.
-      const segmentAngle = 360 / movies.length;
-
-      // 3. Target Angle: The angle needed to land the pointer on the winner.
-      // We subtract because the rotation is clockwise.
-      const targetAngle = segmentAngle * winnerIndex;
-      
-      // 4. Random Offset: Add a small random offset within the segment for variability.
-      const randomOffset = (Math.random() - 0.5) * segmentAngle * 0.8;
-
-      const finalRotation = baseRotation - targetAngle + randomOffset;
-      
-      setResult({ movie: winner, finalRotation });
-
-      // After the animation duration, finalize the state
-      setTimeout(() => {
+    const winningMovie = selectWinner(eligibleMovies);
+    if (!winningMovie) {
         setIsSpinning(false);
-        if (navigator.vibrate) {
-          navigator.vibrate([200, 50, 200]); // Haptic feedback for win
+        return;
+    }
+    
+    // Find the index of the winner in the original list
+    const winnerIndexInEligible = eligibleMovies.findIndex(m => m.id === winningMovie.id);
+    
+    // Determine the target index in the long reel
+    // We want to land on the winner somewhere in the latter half of the reel
+    // To make it look random, we find an instance of the winner around the 3/4 mark
+    const targetZoneStart = Math.floor(REEL_LENGTH * 0.75);
+    let targetIndex = -1;
+    for(let i = targetZoneStart; i < REEL_LENGTH; i++) {
+        if(reelItems[i].id === winningMovie.id) {
+            targetIndex = i;
+            break;
         }
-        resolve(winner);
-      }, SPIN_DURATION_MS);
-    });
-  }, [isSpinning]);
+    }
+    // Fallback if not found (should be impossible with the modulo logic)
+    if (targetIndex === -1) {
+        targetIndex = REEL_LENGTH - eligibleMovies.length + winnerIndexInEligible;
+    }
+
+    setSpinTargetIndex(targetIndex);
+
+    setTimeout(() => {
+      setIsSpinning(false);
+      setWinner(winningMovie);
+    }, SPIN_DURATION_MS);
+  }, [isSpinning, eligibleMovies, reelItems]);
 
   const reset = useCallback(() => {
-    setResult(null);
+    setIsSpinning(false);
+    setWinner(null);
+    setSpinTargetIndex(0);
   }, []);
 
-  return { isSpinning, result, spin, reset };
+  return {
+    isSpinning,
+    winner,
+    reelItems,
+    spinTargetIndex,
+    startSpin,
+    reset,
+    SPIN_DURATION_MS,
+  };
 };

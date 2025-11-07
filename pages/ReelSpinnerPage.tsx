@@ -1,122 +1,117 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getUnwatchedMoviesForReel, markWatchedTogether } from '../services/movieService';
-import { Movie } from '../types';
-import { useRoulette } from '../hooks/useRoulette';
-import { filterEligibleMovies } from '../utils/spinLogic';
-import { ChevronLeft, Loader2, Film } from '../components/icons/Icons';
-import LoadingSpinner from '../components/common/LoadingSpinner';
-import MovieReel from '../components/roulette/MovieReel';
-import ResultModal from '../components/roulette/ResultModal';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { getGroupById } from '../../services/groupService';
+import { getUnwatchedMoviesForReel, markWatchedTogether } from '../../services/movieService';
+import { filterEligibleMovies } from '../../utils/spinLogic';
+import { Movie, Group } from '../../types';
+import { useRoulette } from '../../hooks/useRoulette';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import MovieReel from '../../components/roulette/MovieReel';
+import ResultModal from '../../components/roulette/ResultModal';
+import ReelFilterTabs from '../../components/roulette/ReelFilterTabs';
+import { getPosterUrl } from '../../services/tmdbService';
+import { ChevronLeft, Film, Ticket } from '../../components/icons/Icons';
+
+type MovieFilter = 'eligible' | 'all';
 
 const ReelSpinnerPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
-  const [allUnwatchedMovies, setAllUnwatchedMovies] = useState<Movie[]>([]);
+
+  const [group, setGroup] = useState<Group | null>(null);
+  const [unwatchedMovies, setUnwatchedMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showResultModal, setShowResultModal] = useState(false);
+  const [filter, setFilter] = useState<MovieFilter>('eligible');
 
-  const { isSpinning, result, spin, reset } = useRoulette();
+  const eligibleMovies = useMemo(() => filterEligibleMovies(unwatchedMovies), [unwatchedMovies]);
+  
+  const {
+    isSpinning,
+    winner,
+    reelItems,
+    spinTargetIndex,
+    startSpin,
+    reset,
+    SPIN_DURATION_MS,
+  } = useRoulette(eligibleMovies);
 
   useEffect(() => {
-    if (!groupId) return;
-    const fetchMovies = async () => {
+    const fetchData = async () => {
+      if (!groupId) { navigate('/groups'); return; }
       setLoading(true);
-      setError('');
       try {
-        const movies = await getUnwatchedMoviesForReel(groupId);
-        setAllUnwatchedMovies(movies);
+        const [groupData, moviesData] = await Promise.all([
+          getGroupById(groupId),
+          getUnwatchedMoviesForReel(groupId),
+        ]);
+        setGroup(groupData);
+        setUnwatchedMovies(moviesData);
       } catch (err) {
-        setError("Could not load movies for the reel.");
+        console.error("Failed to load spinner data:", err);
+        setError("Could not load data for the reel. Please try again.");
       } finally {
         setLoading(false);
       }
     };
-    fetchMovies();
-  }, [groupId]);
+    fetchData();
+  }, [groupId, navigate]);
 
-  const eligibleMovies = useMemo(() => filterEligibleMovies(allUnwatchedMovies), [allUnwatchedMovies]);
-
-  const handleSpin = async () => {
-    const winner = await spin(eligibleMovies);
-    setTimeout(() => {
-        setShowResultModal(true);
-    }, 500); // Small delay after spin stops to show result
-  };
-
-  const handleMarkWatched = async (movieId: string) => {
-    if (!groupId) return;
-    await markWatchedTogether(groupId, movieId);
-    // Refresh movie list
-    setAllUnwatchedMovies(prev => prev.filter(m => m.id !== movieId));
-    setShowResultModal(false);
+  const handleMarkWatched = async () => {
+    if (!winner || !groupId) return;
+    await markWatchedTogether(groupId, winner.id);
+    // Refresh list of unwatched movies after marking one as watched
+    setUnwatchedMovies(prev => prev.filter(m => m.id !== winner.id));
     reset();
   };
 
   const handleSpinAgain = () => {
-    setShowResultModal(false);
     reset();
-    handleSpin();
+    startSpin();
   };
   
-  const handleCloseModal = () => {
-    setShowResultModal(false);
-    reset();
-  };
+  const moviesToShow = filter === 'eligible' ? eligibleMovies : unwatchedMovies;
 
   const renderContent = () => {
     if (loading) return <LoadingSpinner />;
     if (error) return <div className="text-center text-cinema-red">{error}</div>;
 
-    if (allUnwatchedMovies.length > 0 && eligibleMovies.length < 2) {
+    if (unwatchedMovies.length === 0) {
       return (
         <div className="text-center">
-            <Film className="w-16 h-16 text-gray-700 mx-auto" />
-            <h3 className="text-xl font-bold mt-4">Not enough movies to spin!</h3>
-            <p className="text-gray-400 mt-2">
-                At least two movies need more 'Must Watch' votes than 'Pass' votes.
-            </p>
-            <Link to={`/groups/${groupId}`} className="mt-6 inline-block px-6 py-3 bg-gold text-dark font-bold rounded-lg">
-                Back to Group
-            </Link>
+            <Film className="w-24 h-24 text-gray-700 mx-auto" />
+            <h2 className="mt-4 text-2xl font-bold">The Reel is Empty!</h2>
+            <p className="text-gray-400">Add some movies to the group list to get started.</p>
         </div>
       );
     }
     
-    if (allUnwatchedMovies.length === 0) {
+    if (eligibleMovies.length === 0) {
        return (
         <div className="text-center">
-            <Film className="w-16 h-16 text-gray-700 mx-auto" />
-            <h3 className="text-xl font-bold mt-4">You've watched everything!</h3>
-            <p className="text-gray-400 mt-2">
-                Add some new movies to the group to spin the reel.
-            </p>
-            <Link to={`/groups/${groupId}`} className="mt-6 inline-block px-6 py-3 bg-gold text-dark font-bold rounded-lg">
-                Add Movies
-            </Link>
+            <Film className="w-24 h-24 text-gray-700 mx-auto" />
+            <h2 className="mt-4 text-2xl font-bold">No Movies Eligible</h2>
+            <p className="text-gray-400">A movie needs more 'Must Watch' votes than 'Pass' votes to be in the spin.</p>
+            <p className="text-gray-400 mt-1">Go back and vote on some movies!</p>
         </div>
       );
     }
 
     return (
-      <div className="w-full flex flex-col items-center justify-center gap-8">
+      <div className="w-full flex flex-col items-center gap-8">
         <MovieReel
-          movies={eligibleMovies}
-          rotation={result?.finalRotation ?? 0}
+          items={reelItems}
+          targetIndex={spinTargetIndex}
           isSpinning={isSpinning}
-          result={result?.movie ?? null}
+          spinDuration={SPIN_DURATION_MS}
         />
         <button
-          onClick={handleSpin}
-          disabled={isSpinning || eligibleMovies.length < 2}
-          className="w-full max-w-xs h-16 flex items-center justify-center bg-gold text-dark font-bold text-xl rounded-lg shadow-lg hover:bg-gold-light disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed transform hover:scale-105 transition-all"
+          onClick={startSpin}
+          disabled={isSpinning || !!winner}
+          className="flex items-center gap-3 px-12 py-4 bg-gold text-dark font-bold text-xl rounded-lg shadow-lg hover:bg-gold-light transition-transform transform hover:scale-105 active:scale-100 disabled:bg-gold-dark disabled:cursor-not-allowed disabled:scale-100"
         >
-          {isSpinning ? (
-            <><Loader2 className="w-6 h-6 animate-spin mr-3" /> Spinning...</>
-          ) : (
-            '🎡 SPIN TO DECIDE!'
-          )}
+          <Ticket className="w-7 h-7" />
+          {isSpinning ? 'Spinning...' : 'Spin the Reel!'}
         </button>
       </div>
     );
@@ -125,26 +120,41 @@ const ReelSpinnerPage: React.FC = () => {
   return (
     <>
       <div className="min-h-screen bg-dark text-white flex flex-col">
-        <header className="p-4 md:px-8 flex items-center justify-between">
+        <header className="p-4 md:px-8 flex items-center">
           <Link to={`/groups/${groupId}`} className="p-2 rounded-full hover:bg-dark-elevated" aria-label="Back to group">
             <ChevronLeft className="w-6 h-6" />
           </Link>
-          <div className="text-center">
-              <h1 className="text-3xl font-bold">Reel Spinner</h1>
-              <p className="text-gold font-semibold">{eligibleMovies.length} movies in the reel</p>
+          <div className="flex flex-col ml-4">
+            <h1 className="text-xl md:text-2xl font-bold truncate">{group?.name}</h1>
+            <span className="text-sm text-gray-400">Reel Spinner</span>
           </div>
-          <div className="w-10"></div> {/* Spacer */}
         </header>
 
-        <main className="flex-grow flex flex-col items-center justify-center p-4">
-          {renderContent()}
+        <main className="flex-grow flex flex-col items-center justify-center p-4 md:p-8">
+            {renderContent()}
         </main>
+        
+        <footer className="p-4 md:p-8 flex flex-col items-center gap-4">
+            <ReelFilterTabs 
+                activeFilter={filter}
+                onFilterChange={setFilter as (filter: 'eligible' | 'all') => void}
+                eligibleCount={eligibleMovies.length}
+                allCount={unwatchedMovies.length}
+            />
+            <div className="w-full max-w-5xl h-32 overflow-x-auto whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-dark-elevated">
+                <div className="flex gap-3 p-2">
+                    {moviesToShow.map(movie => (
+                        <div key={movie.id} className="w-20 flex-shrink-0" title={movie.title}>
+                           <img src={getPosterUrl(movie.posterPath, 'w92')} alt={movie.title} className="w-full h-auto rounded" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </footer>
       </div>
-
       <ResultModal
-        isOpen={showResultModal && !!result}
-        movie={result?.movie ?? null}
-        onClose={handleCloseModal}
+        winner={winner}
+        onClose={reset}
         onMarkWatched={handleMarkWatched}
         onSpinAgain={handleSpinAgain}
       />
