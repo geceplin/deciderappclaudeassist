@@ -2,9 +2,9 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getGroupById, leaveGroup } from '../services/groupService';
-import { onGroupMoviesSnapshot } from '../services/movieService';
+import { onGroupMoviesSnapshot, addMovieToGroup } from '../services/movieService';
 import { getUsersByIds } from '../services/userService';
-import { Group, Movie, UserProfile } from '../types';
+import { Group, Movie, UserProfile, MovieSearchResult } from '../types';
 
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import InviteModal from '../components/groups/InviteModal';
@@ -105,6 +105,17 @@ const GroupDetailPage: React.FC = () => {
     }
   };
 
+  const handleAddMovie = async (movie: MovieSearchResult) => {
+    if (!user || !groupId) return;
+    try {
+        await addMovieToGroup(groupId, movie, user.uid);
+    } catch (err: any) {
+        console.error("Failed to add movie:", err);
+        // Re-throw to allow modal to handle UI feedback
+        throw err;
+    }
+  };
+
   const sortedMovies = useMemo(() => {
     return [...movies].sort((a, b) => {
       // Primary sort: number of likes (descending)
@@ -114,6 +125,8 @@ const GroupDetailPage: React.FC = () => {
       return (b.addedAt?.toMillis() || 0) - (a.addedAt?.toMillis() || 0);
     });
   }, [movies]);
+  
+  const existingTmdbIds = useMemo(() => movies.map(m => m.tmdbId).filter(Boolean), [movies]);
 
 
   if (loading) return <LoadingSpinner />;
@@ -209,7 +222,8 @@ const GroupDetailPage: React.FC = () => {
       <AddMovieModal
         isOpen={isAddMovieModalOpen}
         onClose={() => setAddMovieModalOpen(false)}
-        groupId={group.id}
+        onAddMovie={handleAddMovie}
+        existingTmdbIds={existingTmdbIds}
       />
     </>
   );

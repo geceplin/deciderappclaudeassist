@@ -63,10 +63,12 @@ const _fetchFromTMDb = async (endpoint: string, params: Record<string, string | 
  * @returns A MovieSearchResult object.
  */
 const mapToMovieSearchResult = (tmdbMovie: any): MovieSearchResult => ({
+    tmdbId: tmdbMovie.id,
     title: tmdbMovie.title,
     year: tmdbMovie.release_date ? parseInt(tmdbMovie.release_date.substring(0, 4), 10) : 0,
     overview: tmdbMovie.overview,
     posterPath: tmdbMovie.poster_path,
+    rating: tmdbMovie.vote_average,
 });
 
 /**
@@ -114,12 +116,15 @@ export const getMovieDetails = async (movieId: number) => {
  * @param page The page number to fetch.
  * @returns A promise that resolves to the list of popular movies.
  */
-export const getPopularMovies = async (page = 1) => {
+export const getPopularMovies = async (page = 1): Promise<{ results: MovieSearchResult[], total_results: number }> => {
     console.log(`🔍 Fetching popular movies (page ${page})`);
     const cacheKey = `popular-${page}`;
     const data = await _fetchWithCache(cacheKey, () => _fetchFromTMDb('/movie/popular', { page, language: 'en-US' }));
     console.log(`✅ Fetched ${data.results.length} popular movies`);
-    return data;
+    return {
+      ...data,
+      results: data.results.map(mapToMovieSearchResult)
+    };
 };
 
 /**

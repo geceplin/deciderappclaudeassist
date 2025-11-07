@@ -22,7 +22,8 @@ export interface Group {
 }
 
 export interface Movie {
-  id: string;
+  id: string; // Firestore document ID
+  tmdbId: number; // The Movie Database ID
   title: string;
   year: number;
   overview: string;
@@ -33,10 +34,12 @@ export interface Movie {
 }
 
 export interface MovieSearchResult {
+  tmdbId: number;
   title: string;
   year: number;
   overview: string;
   posterPath: string;
+  rating: number;
 }
 
 export interface AuthContextType {

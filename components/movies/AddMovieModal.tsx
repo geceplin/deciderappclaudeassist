@@ -1,177 +1,196 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { searchMovies, addMovieToGroup } from '../../services/movieService';
-import { getPosterUrl } from '../../services/tmdbService';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import * as tmdbService from '../../services/tmdbService';
 import { MovieSearchResult } from '../../types';
-import { X, Search, Plus } from '../icons/Icons';
-import { useAuth } from '../../hooks/useAuth';
+import { X, Search, Loader2 } from '../icons/Icons';
+import { useDebounce } from '../../hooks/useDebounce';
 
-interface AddMovieModalProps {
+interface MovieSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  groupId: string;
+  onAddMovie: (movie: MovieSearchResult) => Promise<void>;
+  existingTmdbIds: number[];
 }
 
-const SearchResultCard: React.FC<{
-    movie: MovieSearchResult,
-    onAdd: () => void,
-    isAdding: boolean,
-}> = ({ movie, onAdd, isAdding }) => {
-    const posterUrl = getPosterUrl(movie.posterPath, 'w300');
+const MovieResultCard: React.FC<{
+  movie: MovieSearchResult;
+  onAdd: () => void;
+  isAdding: boolean;
+  isAdded: boolean;
+}> = ({ movie, onAdd, isAdding, isAdded }) => {
+  const posterUrl = tmdbService.getPosterUrl(movie.posterPath, 'w342');
+
+  const getButtonContent = () => {
+    if (isAdded) return <>✓ Added</>;
+    if (isAdding) return <><Loader2 className="w-5 h-5 animate-spin mr-2" /> Adding...</>;
+    return <>+ Add</>;
+  };
+  
+  return (
+    <div className="group bg-dark-hover rounded-xl overflow-hidden shadow-lg transition-all duration-200 hover:ring-2 hover:ring-gold-dark transform hover:-translate-y-1 flex flex-col">
+       <div className="aspect-[2/3] relative">
+            <img 
+                src={posterUrl} 
+                alt={movie.title}
+                className="w-full h-full object-cover" 
+                loading="lazy" 
+                onError={(e) => { (e.target as HTMLImageElement).src = tmdbService.getPosterUrl(null); }}
+            />
+             {movie.rating > 0 && (
+                <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded-full flex items-center">
+                    ⭐<span className="ml-1">{movie.rating.toFixed(1)}</span>
+                </div>
+            )}
+       </div>
+       <div className="p-3 flex flex-col flex-grow">
+          <h3 className="font-bold text-white truncate text-sm" title={movie.title}>{movie.title}</h3>
+          <p className="text-xs text-gray-400">{movie.year}</p>
+          <div className="mt-auto pt-2">
+            <button
+                onClick={onAdd}
+                disabled={isAdding || isAdded}
+                className={`w-full h-9 flex items-center justify-center text-sm font-semibold rounded-md transition-all duration-200 group-hover:scale-105
+                    ${isAdded ? 'bg-cinema-green text-white cursor-not-allowed' : ''}
+                    ${isAdding ? 'bg-gold-dark text-dark cursor-wait' : ''}
+                    ${!isAdded && !isAdding ? 'bg-gold text-dark hover:bg-gold-light' : ''}
+                `}
+            >
+                {getButtonContent()}
+            </button>
+          </div>
+       </div>
+    </div>
+  );
+};
+
+const AddMovieModal: React.FC<MovieSearchModalProps> = ({ isOpen, onClose, onAddMovie, existingTmdbIds }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const debouncedSearch = useDebounce(searchQuery, 300);
+    const [popularMovies, setPopularMovies] = useState<MovieSearchResult[]>([]);
+    const [searchResults, setSearchResults] = useState<MovieSearchResult[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [activeTab, setActiveTab] = useState<'popular' | 'search'>('popular');
+    const [addingMovieId, setAddingMovieId] = useState<number | null>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            if (popularMovies.length === 0) {
+                const loadPopular = async () => {
+                    setLoading(true);
+                    try {
+                        const data = await tmdbService.getPopularMovies();
+                        setPopularMovies(data.results.slice(0, 12));
+                    } catch (err) {
+                        setError('Failed to load popular movies.');
+                    }
+                    setLoading(false);
+                };
+                loadPopular();
+            }
+            // Auto-focus the input
+            setTimeout(() => inputRef.current?.focus(), 100);
+        } else {
+            document.body.style.overflow = '';
+        }
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            document.body.style.overflow = '';
+        };
+    }, [isOpen]);
+    
+    useEffect(() => {
+        if (debouncedSearch.trim().length > 0) {
+            setActiveTab('search');
+            setLoading(true);
+            setError('');
+            const search = async () => {
+                try {
+                    const data = await tmdbService.searchMovies(debouncedSearch);
+                    setSearchResults(data.results.slice(0, 20));
+                } catch (err) {
+                    setError('Failed to fetch search results.');
+                }
+                setLoading(false);
+            };
+            search();
+        } else {
+            setActiveTab('popular');
+            setSearchResults([]);
+        }
+    }, [debouncedSearch]);
+    
+    const handleAddMovie = async (movie: MovieSearchResult) => {
+        setAddingMovieId(movie.tmdbId);
+        try {
+            await onAddMovie(movie);
+        } catch (err) {
+            alert('Could not add movie. Please try again.');
+        } finally {
+            setAddingMovieId(null);
+        }
+    };
+    
+    const displayMovies = activeTab === 'popular' ? popularMovies : searchResults;
+
+    if (!isOpen) return null;
+
     return (
-        <div className="group relative aspect-[2/3] bg-dark rounded-lg overflow-hidden shadow-md">
-            <img src={posterUrl} alt={movie.title} className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                    onClick={onAdd}
-                    disabled={isAdding}
-                    className="w-12 h-12 bg-gold text-dark rounded-full flex items-center justify-center hover:bg-gold-light disabled:bg-gold-dark"
-                    aria-label={`Add ${movie.title}`}
-                >
-                    {isAdding ? (
-                         <div className="w-6 h-6 border-4 border-dark border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                        <Plus className="w-8 h-8"/>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose} role="dialog" aria-modal="true">
+            <div className="bg-dark-elevated rounded-2xl w-full max-w-4xl h-full max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                <header className="p-6 border-b border-gray-700 flex-shrink-0">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-2xl font-bold text-white">Add Movies</h2>
+                        <button onClick={onClose} aria-label="Close modal" className="p-1 rounded-full hover:bg-dark-hover"><X className="w-6 h-6 text-gray-400"/></button>
+                    </div>
+                    <div className="relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"/>
+                        <input ref={inputRef} type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search any movie..." className="w-full h-12 pl-12 pr-4 bg-dark border-2 border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gold"/>
+                    </div>
+                </header>
+                
+                <div className="px-6 pt-4 flex-shrink-0">
+                    <div className="flex border-b border-gray-700">
+                        <button onClick={() => setActiveTab('popular')} disabled={debouncedSearch.length > 0} className={`py-3 px-4 text-sm font-semibold transition-colors ${activeTab === 'popular' ? 'text-gold border-b-2 border-gold' : 'text-gray-400 hover:text-white'}`}>🔥 Popular</button>
+                        {debouncedSearch.length > 0 && <button onClick={() => setActiveTab('search')} className={`py-3 px-4 text-sm font-semibold transition-colors ${activeTab === 'search' ? 'text-gold border-b-2 border-gold' : 'text-gray-400 hover:text-white'}`}>🔍 Search Results</button>}
+                    </div>
+                </div>
+
+                <main className="p-6 overflow-y-auto flex-grow">
+                    {loading && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {[...Array(8)].map((_, i) => <div key={i} className="bg-dark-hover rounded-xl aspect-[2/3] animate-pulse"/>)}
+                        </div>
                     )}
-                </button>
-            </div>
-            <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                <p className="text-white text-sm font-semibold truncate">{movie.title} ({movie.year})</p>
+                    {!loading && error && <div className="text-center text-cinema-red">{error}</div>}
+                    {!loading && !error && displayMovies.length > 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                            {displayMovies.map(movie => (
+                                <MovieResultCard
+                                    key={movie.tmdbId}
+                                    movie={movie}
+                                    onAdd={() => handleAddMovie(movie)}
+                                    isAdding={addingMovieId === movie.tmdbId}
+                                    isAdded={existingTmdbIds.includes(movie.tmdbId)}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    {!loading && !error && displayMovies.length === 0 && (
+                        <div className="text-center py-12 text-gray-400">
+                            {activeTab === 'search' ? `No results for "${debouncedSearch}".` : 'No popular movies found.'}
+                        </div>
+                    )}
+                </main>
             </div>
         </div>
     );
-}
-
-const AddMovieModal: React.FC<AddMovieModalProps> = ({ isOpen, onClose, groupId }) => {
-  const { user } = useAuth();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<MovieSearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [addingMovieId, setAddingMovieId] = useState<string | null>(null);
-  
-  const timeoutRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-        setQuery('');
-        setResults([]);
-        setError('');
-        setLoading(false);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (query.trim().length < 2) { // Changed to 2 for quicker searching
-      setResults([]);
-      setError('');
-      setLoading(false);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      return;
-    }
-
-    if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-    }
-    
-    setLoading(true);
-    setError('');
-
-    timeoutRef.current = window.setTimeout(async () => {
-        try {
-            const movieResults = await searchMovies(query);
-            setResults(movieResults);
-        } catch (err: any) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    }, 300); // Debounce API calls (reduced to 300ms)
-
-    return () => {
-        if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-        }
-    }
-  }, [query]);
-
-  const handleAddMovie = async (movie: MovieSearchResult) => {
-    if (!user) return;
-    setAddingMovieId(movie.title + movie.year); // Unique identifier for loading state
-    try {
-        await addMovieToGroup(groupId, movie, user.uid);
-    } catch (err: any) {
-        setError(err.message);
-    } finally {
-        setAddingMovieId(null);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-70 flex items-start justify-center z-50 p-4 pt-[10vh] overflow-y-auto"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="bg-dark-elevated rounded-2xl shadow-lg w-full max-w-2xl transform transition-transform duration-300"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-6">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-white">Add a Movie</h2>
-                <button onClick={onClose} aria-label="Close modal">
-                    <X className="w-6 h-6 text-gray-400 hover:text-white" />
-                </button>
-            </div>
-            <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search any movie..."
-                    className="w-full h-14 pl-12 pr-4 bg-dark border-2 border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gold"
-                    autoFocus
-                />
-            </div>
-        </div>
-        
-        <div className="p-6 pt-0 min-h-[300px]">
-            {loading && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-pulse">
-                    {[...Array(4)].map((_, i) => (
-                        <div key={i} className="aspect-[2/3] bg-dark rounded-lg"></div>
-                    ))}
-                </div>
-            )}
-            {error && <p className="text-center text-cinema-red mt-4">{error}</p>}
-            
-            {!loading && !error && results.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {results.map((movie) => (
-                        <SearchResultCard
-                            key={movie.title + movie.year}
-                            movie={movie}
-                            onAdd={() => handleAddMovie(movie)}
-                            isAdding={addingMovieId === (movie.title + movie.year)}
-                        />
-                    ))}
-                </div>
-            )}
-
-            {!loading && !error && query.trim().length >=2 && results.length === 0 && (
-                <p className="text-center text-gray-400 mt-4">No results found for "{query}". Try a different search.</p>
-            )}
-            {!loading && !error && query.trim().length < 2 && (
-                 <p className="text-center text-gray-500 mt-4">Start typing to find movies</p>
-            )}
-        </div>
-      </div>
-    </div>
-  );
 };
 
 export default AddMovieModal;

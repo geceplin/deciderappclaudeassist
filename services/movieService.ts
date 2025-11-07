@@ -73,8 +73,10 @@ export const addMovieToGroup = async (groupId: string, movie: MovieSearchResult,
             throw new Error("Group not found.");
         }
         
+        const { rating, ...movieData } = movie; // Exclude rating from Firestore object
+
         transaction.set(doc(moviesColRef), {
-            ...movie,
+            ...movieData,
             addedBy: userId,
             addedAt: serverTimestamp(),
             likes: [],
