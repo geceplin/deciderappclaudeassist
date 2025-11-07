@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Movie } from '../../types';
 import { getBackdropUrl } from '../../services/tmdbService';
 import Confetti from '../common/Confetti';
-import { X, RefreshCw, Loader2 } from '../icons/Icons';
+import { X, RefreshCw, Loader2, ChevronLeft } from '../icons/Icons';
 
 interface ResultModalProps {
   winner: Movie | null;
@@ -32,16 +32,21 @@ const ResultModal: React.FC<ResultModalProps> = ({ winner, onClose, onMarkWatche
 
   const backdropUrl = getBackdropUrl(winner.backdropPath, 'w1280');
   
-  const handleMarkWatched = async () => {
+  const handleMarkWatchedClick = async () => {
       setIsMarking(true);
       try {
         await onMarkWatched(winner.id);
-        onClose(); // Close after success
+        // On success, the parent component will navigate away, unmounting this modal.
+        // No need to call onClose() or setIsMarking(false) here.
       } catch (error) {
         console.error("Failed to mark movie as watched:", error);
         alert("Could not mark as watched. Please try again.");
-        setIsMarking(false);
+        setIsMarking(false); // Only reset loading state on failure
       }
+  };
+  
+  const handleSpinAgainClick = () => {
+      onSpinAgain();
   };
 
   return (
@@ -82,18 +87,21 @@ const ResultModal: React.FC<ResultModalProps> = ({ winner, onClose, onMarkWatche
 
         <div className="p-6 bg-dark flex flex-col sm:flex-row gap-4 justify-center">
             <button
-                onClick={handleMarkWatched}
+                onClick={handleMarkWatchedClick}
                 disabled={isMarking}
                 className="px-8 py-3 w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg bg-gold text-dark font-bold hover:bg-gold-light disabled:bg-gold-dark disabled:cursor-wait"
             >
                 {isMarking ? <><Loader2 className="w-5 h-5 animate-spin"/> Marking...</> : '✓ Mark as Watched'}
             </button>
-             <button onClick={onSpinAgain} className="px-6 py-3 w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg text-white font-semibold bg-dark-hover hover:bg-gray-700">
+             <button onClick={handleSpinAgainClick} className="px-6 py-3 w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg text-white font-semibold bg-dark-hover hover:bg-gray-700">
                 <RefreshCw className="w-5 h-5" />
                 Spin Again
             </button>
         </div>
-        <button onClick={onClose} className="py-3 text-sm text-gray-500 hover:text-white">Back to Group</button>
+        <button onClick={onClose} className="py-3 text-sm text-gray-500 hover:text-white flex items-center justify-center gap-2">
+            <ChevronLeft className="w-4 h-4" />
+            Back to Reel
+        </button>
       </div>
     </div>
   );

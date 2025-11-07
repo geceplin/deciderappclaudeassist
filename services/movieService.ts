@@ -134,16 +134,34 @@ export const setMovieOpinion = async (groupId: string, movieId: string, userId: 
 };
 
 /**
- * Marks a movie as "watched together" by the group.
+ * Marks a movie as "watched together" by the group using a transaction for atomicity.
+ * This prevents race conditions and ensures the group's activity is also updated.
  */
 export const markMovieWatchedTogether = async (groupId: string, movieId: string, userId: string): Promise<void> => {
+    const groupRef = doc(db, GROUPS, groupId);
     const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
-    await updateDoc(movieRef, {
-        watchedTogether: true,
-        watchedTogetherDate: serverTimestamp(),
-        watchedTogetherBy: userId,
-        groupRatings: {},
-        averageGroupRating: null
+
+    await runTransaction(db, async (transaction) => {
+        const movieDoc = await transaction.get(movieRef);
+        if (!movieDoc.exists()) {
+            throw new Error("Movie not found. It may have been removed.");
+        }
+        
+        const movieData = movieDoc.data();
+        if (movieData.watchedTogether) {
+            console.warn(`Movie ${movieId} was already marked as watched. Race condition handled.`);
+            return; // Gracefully exit if already marked
+        }
+
+        // Atomically update both the movie and the group
+        transaction.update(movieRef, {
+            watchedTogether: true,
+            watchedTogetherDate: serverTimestamp(),
+            watchedTogetherBy: userId,
+        });
+        transaction.update(groupRef, {
+            lastActivity: serverTimestamp()
+        });
     });
 };
 

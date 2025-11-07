@@ -62,7 +62,7 @@ const WatchHistoryPage: React.FC = () => {
             const newRatings = { ...(movie.groupRatings || {}), [user.uid]: rating };
             const allRatings = Object.values(newRatings);
             // Fix: Calculate the new average rating, ensuring all values are numeric and guarding against division by zero.
-            const totalRating = allRatings.reduce((sum, r: any) => sum + (Number(r) || 0), 0);
+            const totalRating = allRatings.reduce((sum: number, r: unknown) => sum + (Number(r) || 0), 0);
             const newAverage = allRatings.length > 0 ? totalRating / allRatings.length : 0;
             return { ...movie, groupRatings: newRatings, averageGroupRating: newAverage };
           }

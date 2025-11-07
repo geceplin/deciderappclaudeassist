@@ -59,15 +59,26 @@ const ReelSpinnerPage: React.FC = () => {
   }, [fetchSpinnerData]);
 
   const handleMarkWatched = async (movieId: string) => {
-    if (!groupId || !user) return;
-    await markMovieWatchedTogether(groupId, movieId, user.uid);
-    reset();
-    // Refresh list of unwatched movies after marking one as watched
-    setUnwatchedMovies(prev => prev.filter(m => m.id !== movieId));
+    if (!groupId || !user || !winner) return;
+    try {
+        await markMovieWatchedTogether(groupId, movieId, user.uid);
+        // Navigate back to group page with a success message for the toast
+        navigate(`/groups/${groupId}`, { 
+            state: { toastMessage: `'${winner.title}' moved to your history! 🍿` } 
+        });
+    } catch (err: any) {
+        console.error("Failed to mark movie as watched:", err);
+        setError(err.message || "Could not move movie to history. Please try again.");
+        // Rethrow to keep modal open and show error
+        throw err;
+    }
   };
 
   const handleSpinAgain = () => {
     reset();
+    // After marking a movie as watched, we need to refresh the movie list
+    // to exclude the winner before spinning again.
+    setUnwatchedMovies(prev => prev.filter(m => m.id !== winner?.id));
     startSpin();
   };
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getGroupById, leaveGroup } from '../services/groupService';
 import { onGroupMoviesSnapshot, addMovieToGroup } from '../services/movieService';
@@ -21,6 +21,7 @@ const GroupDetailPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [group, setGroup] = useState<Group | null>(null);
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -29,10 +30,23 @@ const GroupDetailPage: React.FC = () => {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<OpinionFilter>('all');
   const [activeTab, setActiveTab] = useState<ActiveTab>('watchlist');
+  const [toastMessage, setToastMessage] = useState<string | null>(location.state?.toastMessage || null);
+
 
   const [isInviteModalOpen, setInviteModalOpen] = useState(false);
   const [isAddMovieModalOpen, setAddMovieModalOpen] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+
+  useEffect(() => {
+    if (toastMessage) {
+        const timer = setTimeout(() => {
+            setToastMessage(null);
+            // Clear the location state to prevent toast from reappearing on refresh
+            window.history.replaceState({}, document.title)
+        }, 4000);
+        return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
 
   useEffect(() => {
     if (!groupId) { navigate('/groups'); return; }
@@ -251,6 +265,21 @@ const GroupDetailPage: React.FC = () => {
             movie={selectedMovie}
             onClose={() => setSelectedMovie(null)}
         />
+      )}
+
+      {toastMessage && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-cinema-green text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in-out">
+             <style>{`
+                @keyframes fade-in-out {
+                    0% { opacity: 0; transform: translateY(20px) translateX(-50%); }
+                    15% { opacity: 1; transform: translateY(0) translateX(-50%); }
+                    85% { opacity: 1; transform: translateY(0) translateX(-50%); }
+                    100% { opacity: 0; transform: translateY(20px) translateX(-50%); }
+                }
+                .animate-fade-in-out { animation: fade-in-out 4s ease-in-out forwards; }
+            `}</style>
+            {toastMessage}
+        </div>
       )}
     </>
   );
