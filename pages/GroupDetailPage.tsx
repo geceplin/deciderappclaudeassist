@@ -91,11 +91,23 @@ const GroupDetailPage: React.FC = () => {
     }
   };
 
+  const enrichedMovies = useMemo(() => {
+    return movies.map(movie => {
+        const addedByUser = members.get(movie.addedBy);
+        return {
+            ...movie,
+            // Use the fetched display name as the primary source of truth.
+            // Fall back to the name stored on the movie document, then to a generic default.
+            addedByName: addedByUser?.displayName || movie.addedByName || 'A User',
+        };
+    });
+  }, [movies, members]);
+
   const filteredMovies = useMemo(() => {
     if (filter === 'all') {
-      return movies.sort((a, b) => (b.addedAt?.toMillis() || 0) - (a.addedAt?.toMillis() || 0));
+      return enrichedMovies.sort((a, b) => (b.addedAt?.toMillis() || 0) - (a.addedAt?.toMillis() || 0));
     }
-    return movies.filter(movie => {
+    return enrichedMovies.filter(movie => {
       // Null-safe check on opinionCounts
       const counts = movie.opinionCounts || { mustWatch: 0, alreadySeen: 0, pass: 0 };
       if (filter === 'must-watch') return (counts.mustWatch ?? 0) > 0;
@@ -103,7 +115,7 @@ const GroupDetailPage: React.FC = () => {
       if (filter === 'pass') return (counts.pass ?? 0) > 0;
       return false;
     });
-  }, [movies, filter]);
+  }, [enrichedMovies, filter]);
   
   const existingTmdbIds = useMemo(() => movies.map(m => m.tmdbId), [movies]);
 
@@ -114,7 +126,7 @@ const GroupDetailPage: React.FC = () => {
   const FilterButton: React.FC<{ value: OpinionFilter, label: string, emoji: string }> = ({ value, label, emoji }) => (
     <button
       onClick={() => setFilter(value)}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center text-center ${
         filter === value ? 'bg-gold text-dark' : 'bg-dark-elevated text-gray-300 hover:bg-dark-hover'
       }`}
     >
@@ -145,7 +157,7 @@ const GroupDetailPage: React.FC = () => {
 
         <main className="p-4 md:p-8 max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
-             <div className="flex items-center gap-2 overflow-x-auto pb-2">
+             <div className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-4">
                 <FilterButton value="all" label="All" emoji="🎬" />
                 <FilterButton value="must-watch" label="Must Watch" emoji="🌟" />
                 <FilterButton value="already-seen" label="Seen" emoji="✅" />
