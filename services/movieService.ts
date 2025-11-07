@@ -13,9 +13,10 @@ import {
   getDocs,
   orderBy,
   Timestamp,
+  arrayUnion,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Movie, Opinion, MovieDetails } from '../types';
+import { Movie, Opinion, MovieDetails, Comment } from '../types';
 
 const GROUPS = 'groups';
 const MOVIES = 'movies';
@@ -91,6 +92,7 @@ export const addMovieToGroup = async (groupId: string, movie: MovieDetails, user
             watchedTogetherBy: '',
             groupRatings: {},
             averageGroupRating: null,
+            comments: [],
         };
 
         transaction.set(newMovieRef, movieToAdd);
@@ -230,5 +232,45 @@ export const removeMovieFromGroup = async (groupId: string, movieId: string, use
             movieCount: newCount,
             lastActivity: serverTimestamp() 
         });
+    });
+};
+
+const generateId = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+/**
+ * Adds a new comment to a watched movie.
+ */
+export const addCommentToMovie = async (groupId: string, movieId: string, userId: string, text: string): Promise<Comment> => {
+    const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
+    const newComment: Comment = {
+        id: generateId(),
+        userId,
+        text: text.trim(),
+        timestamp: Timestamp.now(),
+    };
+    await updateDoc(movieRef, {
+        comments: arrayUnion(newComment)
+    });
+    return newComment;
+};
+
+/**
+ * Deletes a user's comment from a movie.
+ */
+export const deleteCommentFromMovie = async (groupId: string, movieId: string, commentToDelete: Comment): Promise<void> => {
+    const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
+
+    await runTransaction(db, async (transaction) => {
+        const movieDoc = await transaction.get(movieRef);
+        if (!movieDoc.exists()) {
+            throw new Error("Movie not found.");
+        }
+        
+        const movieData = movieDoc.data();
+        const existingComments = (movieData.comments || []) as Comment[];
+        
+        const updatedComments = existingComments.filter(comment => comment.id !== commentToDelete.id);
+        
+        transaction.update(movieRef, { comments: updatedComments });
     });
 };

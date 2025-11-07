@@ -23,6 +23,13 @@ export interface Group {
 
 export type Opinion = 'must-watch' | 'already-seen' | 'pass';
 
+export interface Comment {
+  id: string;
+  userId: string;
+  text: string;
+  timestamp: Timestamp;
+}
+
 export interface Movie {
   id: string; // Firestore document ID
   tmdbId: number; // The Movie Database ID
@@ -58,6 +65,7 @@ export interface Movie {
   watchedTogetherBy?: string; // userId of who marked it as watched
   groupRatings?: { [userId: string]: number }; // Map of userId to rating (1-5)
   averageGroupRating?: number | null;
+  comments?: Comment[];
 }
 
 export interface MovieSearchResult {
