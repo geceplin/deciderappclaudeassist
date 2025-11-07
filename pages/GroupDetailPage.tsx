@@ -10,7 +10,6 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import InviteModal from '../components/groups/InviteModal';
 import AddMovieModal from '../components/movies/AddMovieModal';
 import MovieCard from '../components/movies/MovieCard';
-import Avatar from '../components/common/Avatar';
 import { ChevronLeft, Plus, Film, Ticket } from '../components/icons/Icons';
 
 type OpinionFilter = 'all' | Opinion;
@@ -96,19 +95,19 @@ const GroupDetailPage: React.FC = () => {
         const addedByUser = members.get(movie.addedBy);
         return {
             ...movie,
-            // Use the fetched display name as the primary source of truth.
-            // Fall back to the name stored on the movie document, then to a generic default.
             addedByName: addedByUser?.displayName || movie.addedByName || 'A User',
         };
     });
   }, [movies, members]);
 
   const filteredMovies = useMemo(() => {
+    // Show unwatched movies only on this page
+    const unwatched = enrichedMovies.filter(m => !m.watchedTogether);
+
     if (filter === 'all') {
-      return enrichedMovies.sort((a, b) => (b.addedAt?.toMillis() || 0) - (a.addedAt?.toMillis() || 0));
+      return unwatched.sort((a, b) => (b.addedAt?.toMillis() || 0) - (a.addedAt?.toMillis() || 0));
     }
-    return enrichedMovies.filter(movie => {
-      // Null-safe check on opinionCounts
+    return unwatched.filter(movie => {
       const counts = movie.opinionCounts || { mustWatch: 0, alreadySeen: 0, pass: 0 };
       if (filter === 'must-watch') return (counts.mustWatch ?? 0) > 0;
       if (filter === 'already-seen') return (counts.alreadySeen ?? 0) > 0;
@@ -146,13 +145,21 @@ const GroupDetailPage: React.FC = () => {
             <div className="w-5 h-5 rounded-full ml-4" style={{ backgroundColor: group.color }}></div>
             <h1 className="text-2xl md:text-3xl font-bold ml-3 truncate">{group.name}</h1>
           </div>
-          <button
-            onClick={() => navigate(`/groups/${groupId}/spin`)}
-            className="flex items-center space-x-2 px-4 py-2 bg-gold text-dark font-bold rounded-lg shadow-lg hover:bg-gold-light transform hover:scale-105 transition-transform"
-          >
-            <Ticket className="w-5 h-5" />
-            <span>Spin Reel</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+                onClick={() => navigate(`/groups/${groupId}/history`)}
+                className="px-4 py-2 text-sm bg-dark-elevated rounded-lg hover:bg-dark-hover"
+              >
+                History
+              </button>
+            <button
+              onClick={() => navigate(`/groups/${groupId}/spin`)}
+              className="flex items-center space-x-2 px-4 py-2 bg-gold text-dark font-bold rounded-lg shadow-lg hover:bg-gold-light transform hover:scale-105 transition-transform"
+            >
+              <Ticket className="w-5 h-5" />
+              <span>Spin Reel</span>
+            </button>
+          </div>
         </header>
 
         <main className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -181,7 +188,7 @@ const GroupDetailPage: React.FC = () => {
           ) : (
               <div className="text-center p-12 bg-dark-elevated rounded-2xl border-2 border-dashed border-gray-700">
                   <Film className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-white">No Movies Found</h3>
+                  <h3 className="text-xl font-bold text-white">No Unwatched Movies Found</h3>
                   <p className="text-gray-400 mt-2">
                     {filter === 'all' ? 'Your watchlist is empty. Add a movie to get started!' : `No movies match the "${filter}" filter.`}
                   </p>

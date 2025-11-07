@@ -8,6 +8,7 @@ import GroupsPage from './pages/GroupsPage';
 import GroupDetailPage from './pages/GroupDetailPage';
 import JoinGroupPage from './pages/JoinGroupPage';
 import ReelSpinnerPage from './pages/ReelSpinnerPage';
+import WatchHistoryPage from './pages/WatchHistoryPage';
 import { Film } from './components/icons/Icons';
 
 // Placeholder for the landing page
@@ -60,6 +61,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ReelSpinnerPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/groups/:groupId/history" 
+            element={
+              <ProtectedRoute>
+                <WatchHistoryPage />
               </ProtectedRoute>
             } 
           />

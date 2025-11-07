@@ -1,30 +1,30 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import { getGroupById } from '../../services/groupService';
-import { getUnwatchedMoviesForReel, markWatchedTogether } from '../../services/movieService';
-import { filterEligibleMovies } from '../../utils/spinLogic';
+import { getUnwatchedMoviesForReel, markMovieWatchedTogether } from '../../services/movieService';
+import { filterMoviesForReel } from '../../utils/spinLogic';
 import { Movie, Group } from '../../types';
 import { useRoulette } from '../../hooks/useRoulette';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import MovieReel from '../../components/roulette/MovieReel';
 import ResultModal from '../../components/roulette/ResultModal';
-import ReelFilterTabs from '../../components/roulette/ReelFilterTabs';
+import ReelFilterTabs, { ReelFilterType } from '../../components/roulette/ReelFilterTabs';
 import { getPosterUrl } from '../../services/tmdbService';
 import { ChevronLeft, Film, Ticket } from '../../components/icons/Icons';
-
-type MovieFilter = 'eligible' | 'all';
 
 const ReelSpinnerPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [group, setGroup] = useState<Group | null>(null);
   const [unwatchedMovies, setUnwatchedMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState<MovieFilter>('eligible');
+  const [filter, setFilter] = useState<ReelFilterType>('must-watch');
 
-  const eligibleMovies = useMemo(() => filterEligibleMovies(unwatchedMovies), [unwatchedMovies]);
+  const moviesForReel = useMemo(() => filterMoviesForReel(unwatchedMovies, filter), [unwatchedMovies, filter]);
   
   const {
     isSpinning,
@@ -34,10 +34,9 @@ const ReelSpinnerPage: React.FC = () => {
     startSpin,
     reset,
     SPIN_DURATION_MS,
-  } = useRoulette(eligibleMovies);
+  } = useRoulette(moviesForReel);
 
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchSpinnerData = useCallback(async () => {
       if (!groupId) { navigate('/groups'); return; }
       setLoading(true);
       try {
@@ -53,32 +52,39 @@ const ReelSpinnerPage: React.FC = () => {
       } finally {
         setLoading(false);
       }
-    };
-    fetchData();
   }, [groupId, navigate]);
+  
+  useEffect(() => {
+    fetchSpinnerData();
+  }, [fetchSpinnerData]);
 
-  const handleMarkWatched = async () => {
-    if (!winner || !groupId) return;
-    await markWatchedTogether(groupId, winner.id);
-    // Refresh list of unwatched movies after marking one as watched
-    setUnwatchedMovies(prev => prev.filter(m => m.id !== winner.id));
+  const handleMarkWatched = async (movieId: string) => {
+    if (!groupId || !user) return;
+    await markMovieWatchedTogether(groupId, movieId, user.uid);
     reset();
+    // Refresh list of unwatched movies after marking one as watched
+    setUnwatchedMovies(prev => prev.filter(m => m.id !== movieId));
   };
 
   const handleSpinAgain = () => {
     reset();
     startSpin();
   };
-  
-  const moviesToShow = filter === 'eligible' ? eligibleMovies : unwatchedMovies;
 
+  const filterCounts = useMemo(() => ({
+      'must-watch': filterMoviesForReel(unwatchedMovies, 'must-watch').length,
+      'all': filterMoviesForReel(unwatchedMovies, 'all').length,
+      'must-watch-seen': filterMoviesForReel(unwatchedMovies, 'must-watch-seen').length,
+      'must-watch-pass': filterMoviesForReel(unwatchedMovies, 'must-watch-pass').length,
+  }), [unwatchedMovies]);
+  
   const renderContent = () => {
     if (loading) return <LoadingSpinner />;
     if (error) return <div className="text-center text-cinema-red">{error}</div>;
 
     if (unwatchedMovies.length === 0) {
       return (
-        <div className="text-center">
+        <div className="text-center p-8">
             <Film className="w-24 h-24 text-gray-700 mx-auto" />
             <h2 className="mt-4 text-2xl font-bold">The Reel is Empty!</h2>
             <p className="text-gray-400">Add some movies to the group list to get started.</p>
@@ -86,13 +92,13 @@ const ReelSpinnerPage: React.FC = () => {
       );
     }
     
-    if (eligibleMovies.length === 0) {
+    if (moviesForReel.length < 2) {
        return (
-        <div className="text-center">
+        <div className="text-center p-8">
             <Film className="w-24 h-24 text-gray-700 mx-auto" />
-            <h2 className="mt-4 text-2xl font-bold">No Movies Eligible</h2>
-            <p className="text-gray-400">A movie needs more 'Must Watch' votes than 'Pass' votes to be in the spin.</p>
-            <p className="text-gray-400 mt-1">Go back and vote on some movies!</p>
+            <h2 className="mt-4 text-2xl font-bold">Not Enough Movies</h2>
+            <p className="text-gray-400">You need at least 2 eligible movies for this filter to spin the reel.</p>
+            <p className="text-gray-400 mt-1">Try a different filter or get more votes!</p>
         </div>
       );
     }
@@ -107,7 +113,7 @@ const ReelSpinnerPage: React.FC = () => {
         />
         <button
           onClick={startSpin}
-          disabled={isSpinning || !!winner}
+          disabled={isSpinning || !!winner || moviesForReel.length < 2}
           className="flex items-center gap-3 px-12 py-4 bg-gold text-dark font-bold text-xl rounded-lg shadow-lg hover:bg-gold-light transition-transform transform hover:scale-105 active:scale-100 disabled:bg-gold-dark disabled:cursor-not-allowed disabled:scale-100"
         >
           <Ticket className="w-7 h-7" />
@@ -137,19 +143,9 @@ const ReelSpinnerPage: React.FC = () => {
         <footer className="p-4 md:p-8 flex flex-col items-center gap-4">
             <ReelFilterTabs 
                 activeFilter={filter}
-                onFilterChange={setFilter as (filter: 'eligible' | 'all') => void}
-                eligibleCount={eligibleMovies.length}
-                allCount={unwatchedMovies.length}
+                onFilterChange={setFilter}
+                counts={filterCounts}
             />
-            <div className="w-full max-w-5xl h-32 overflow-x-auto whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-dark-elevated">
-                <div className="flex gap-3 p-2">
-                    {moviesToShow.map(movie => (
-                        <div key={movie.id} className="w-20 flex-shrink-0" title={movie.title}>
-                           <img src={getPosterUrl(movie.posterPath, 'w92')} alt={movie.title} className="w-full h-auto rounded" />
-                        </div>
-                    ))}
-                </div>
-            </div>
         </footer>
       </div>
       <ResultModal

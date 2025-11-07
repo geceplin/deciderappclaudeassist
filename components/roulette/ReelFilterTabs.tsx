@@ -1,32 +1,54 @@
 import React from 'react';
 
-type Filter = 'eligible' | 'all';
+export type ReelFilterType = 'must-watch' | 'all' | 'must-watch-seen' | 'must-watch-pass';
 
 interface ReelFilterTabsProps {
-  activeFilter: Filter;
-  onFilterChange: (filter: Filter) => void;
-  eligibleCount: number;
-  allCount: number;
+  activeFilter: ReelFilterType;
+  onFilterChange: (filter: ReelFilterType) => void;
+  counts: Record<ReelFilterType, number>;
 }
 
-const ReelFilterTabs: React.FC<ReelFilterTabsProps> = ({ activeFilter, onFilterChange, eligibleCount, allCount }) => {
-  const TabButton: React.FC<{ filter: Filter, label: string, count: number }> = ({ filter, label, count }) => (
-    <button
-      onClick={() => onFilterChange(filter)}
-      className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${
-        activeFilter === filter
-          ? 'bg-gold text-dark'
-          : 'bg-dark-elevated text-gray-400 hover:bg-dark-hover hover:text-white'
-      }`}
-    >
-      {label} <span className="font-mono bg-dark px-1.5 py-0.5 rounded">{count}</span>
-    </button>
-  );
+const filters: { id: ReelFilterType; label: string; }[] = [
+  { id: 'must-watch', label: '🌟 Must Watch' },
+  { id: 'all', label: '🎬 All Movies' },
+  { id: 'must-watch-seen', label: '🌟✅ Must + Seen' },
+  { id: 'must-watch-pass', label: '🌟👎 Must + Pass' },
+];
 
+const ReelFilterTabs: React.FC<ReelFilterTabsProps> = ({ activeFilter, onFilterChange, counts }) => {
   return (
-    <div className="flex gap-2 p-1 bg-dark rounded-lg">
-      <TabButton filter="eligible" label="Eligible to Spin" count={eligibleCount} />
-      <TabButton filter="all" label="All Unwatched" count={allCount} />
+    <div className="w-full max-w-3xl px-4">
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+            {filters.map(filter => {
+                const count = counts[filter.id] ?? 0;
+                const isActive = activeFilter === filter.id;
+                
+                return (
+                    <button
+                        key={filter.id}
+                        onClick={() => onFilterChange(filter.id)}
+                        disabled={count === 0}
+                        className={`
+                            flex-shrink-0 px-5 py-3 rounded-lg border-2 text-sm font-semibold
+                            flex items-center gap-2 transition-all duration-200 whitespace-nowrap
+                            ${isActive
+                                ? 'bg-gold border-gold text-dark shadow-md'
+                                : 'bg-dark-elevated border-gray-700 text-gray-300 hover:border-gray-500'
+                            }
+                            ${count === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:-translate-y-0.5'}
+                        `}
+                    >
+                        <span>{filter.label}</span>
+                        <span className={`
+                            px-2 py-0.5 rounded-full text-xs font-mono
+                             ${isActive ? 'bg-black/10' : 'bg-dark'}
+                        `}>
+                            {count}
+                        </span>
+                    </button>
+                );
+            })}
+        </div>
     </div>
   );
 };

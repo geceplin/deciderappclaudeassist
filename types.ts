@@ -55,7 +55,9 @@ export interface Movie {
   // Group decision tracking
   watchedTogether: boolean; // Guaranteed to exist, defaults to false
   watchedTogetherDate: Timestamp | null;
-  groupRating: number | null;
+  watchedTogetherBy?: string; // userId of who marked it as watched
+  groupRatings?: { [userId: string]: number }; // Map of userId to rating (1-5)
+  averageGroupRating?: number | null;
 }
 
 export interface MovieSearchResult {
