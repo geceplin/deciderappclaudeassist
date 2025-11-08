@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getUserProfile, updateUserProfile } from '../services/userService';
 import { UserProfile } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import { ArrowLeft, Save, Loader2 } from '../components/icons/Icons';
+import { ArrowLeft, Save, Loader2, Settings } from '../components/icons/Icons';
 import Avatar from '../components/common/Avatar';
 import { formatDate } from '../utils/formatters';
 
@@ -67,10 +67,14 @@ const ProfilePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-dark text-white">
-      <header className="p-4 md:px-8 flex items-center sticky top-0 bg-dark/80 backdrop-blur-sm z-10">
+      <header className="p-4 md:px-8 flex items-center justify-between sticky top-0 bg-dark/80 backdrop-blur-sm z-10">
         <Link to="/groups" className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors p-2 rounded-lg -ml-2">
           <ArrowLeft className="w-5 h-5" />
           <span>Back to Groups</span>
+        </Link>
+        <Link to="/settings" className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors p-2 rounded-lg -mr-2">
+            <Settings className="w-5 h-5" />
+            <span>Settings</span>
         </Link>
       </header>
       <main className="p-4 md:p-8 max-w-3xl mx-auto">

@@ -10,6 +10,7 @@ import JoinGroupPage from './pages/JoinGroupPage';
 import ReelSpinnerPage from './pages/ReelSpinnerPage';
 import WatchHistoryPage from './pages/WatchHistoryPage';
 import ProfilePage from './pages/ProfilePage';
+import SettingsPage from './pages/SettingsPage';
 import { Film } from './components/icons/Icons';
 
 // Placeholder for the landing page
@@ -78,6 +79,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route 
+            path="/settings" 
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
               </ProtectedRoute>
             }
           />

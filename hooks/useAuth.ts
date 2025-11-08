@@ -8,7 +8,11 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
@@ -37,9 +41,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       case 'auth/invalid-email': return 'Please enter a valid email address.';
       case 'auth/user-not-found': return 'No account found with this email. Want to sign up?';
       case 'auth/wrong-password': return 'Incorrect password. Please try again!';
-      case 'auth/too-many-requests': return 'Access to this account has been temporarily disabled due to many failed login attempts. You can immediately restore it by resetting your password or you can try again later.';
+      case 'auth/too-many-requests': return 'Access to this account has been temporarily disabled due to many failed login attempts. You can try again later.';
       case 'auth/network-request-failed': return 'Connection lost. Check your internet and try again.';
       case 'auth/popup-closed-by-user': return 'The sign-in process was cancelled.';
+      case 'auth/requires-recent-login': return 'This action is sensitive and requires a recent login. Please sign out and sign in again before retrying.';
       default: return 'An unexpected error occurred. Please try again.';
     }
   };
@@ -97,6 +102,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const sendPasswordResetLink = async (email: string): Promise<void> => {
+    try {
+      // The URL should point back to your sign-in page on your deployed site.
+      const actionCodeSettings = {
+        url: `${window.location.origin}${window.location.pathname}#/signin`,
+        handleCodeInApp: false,
+      };
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    } catch (error: any) {
+      throw new Error(mapFirebaseError(error.code));
+    }
+  };
+  
+  const changeUserPassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || !currentUser.email) {
+      throw new Error("Cannot change password. No user is signed in or the user has no email.");
+    }
+    try {
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+      // Re-authenticate before changing password for security
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPassword);
+    } catch (error: any) {
+      throw new Error(mapFirebaseError(error.code));
+    }
+  };
+
   const value: AuthContextType = {
     user,
     loading,
@@ -104,6 +137,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     signIn,
     signInWithGoogle,
     signOut,
+    sendPasswordResetLink,
+    changeUserPassword,
   };
 
   // FIX: Replaced JSX with React.createElement to be compatible with a .ts file and fix parsing errors.

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-// FIX: Imported the missing Opinion type.
+// FIX: Imported the missing Opinion type used in the handleOpinionChange function.
 import { Movie, Opinion } from '../../types';
 import { setMovieOpinion } from '../../services/movieService';
 import { getPosterUrl } from '../../services/tmdbService';

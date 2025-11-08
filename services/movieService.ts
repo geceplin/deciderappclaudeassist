@@ -96,10 +96,10 @@ export const addMovieToGroup = async (groupId: string, movie: MovieDetails, user
             opinions: { [userId]: 'must-watch' },
             opinionCounts: { mustWatch: 1, alreadySeen: 0, pass: 0 },
             
-            // CRITICAL FIX: Use 'null' for fields that are not yet set.
+            // FIX: Use 'null' instead of 'undefined' for fields that are not yet set, as Firestore does not handle 'undefined'.
             watchedTogether: false,
             watchedTogetherDate: null,
-            watchedTogetherBy: null, // Corrected from 'undefined'
+            watchedTogetherBy: null,
             groupRatings: {},
             averageGroupRating: null,
             comments: [],

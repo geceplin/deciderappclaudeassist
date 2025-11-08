@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../path/to/your/existing/auth/file';
+import { useAuth } from '../../hooks/useAuth';
 import { getGroupById } from '../../services/groupService';
 import { getUnwatchedMoviesForReel, markMovieWatchedTogether } from '../../services/movieService';
 import { filterMoviesForReel } from '../../utils/spinLogic';
