@@ -1,6 +1,6 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Link } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';

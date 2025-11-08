@@ -66,7 +66,7 @@ const WatchHistoryPage: React.FC = () => {
           if (movie.id === movieId) {
             const newRatings = { ...(movie.groupRatings || {}), [user.uid]: rating };
             const allRatings = Object.values(newRatings);
-            // FIX: Explicitly type accumulator and value to fix reduce error.
+            // FIX: Explicitly typed the reducer's accumulator and value to prevent type errors during the arithmetic operation.
             const totalRating = allRatings.reduce((sum: number, r: unknown) => sum + (Number(r) || 0), 0);
             const newAverage = allRatings.length > 0 ? totalRating / allRatings.length : 0;
             return { ...movie, groupRatings: newRatings, averageGroupRating: newAverage };
