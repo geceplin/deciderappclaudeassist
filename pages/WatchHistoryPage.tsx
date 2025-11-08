@@ -1,7 +1,8 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { getWatchHistory, rateWatchedMovie } from '../services/movieService';
+import { getWatchHistory, rateWatchedMovie, unwatchMovie } from '../services/movieService';
 import { getGroupById } from '../services/groupService';
 import { getUsersByIds } from '../services/userService';
 import { Movie, UserProfile, Comment } from '../types';
@@ -21,9 +22,15 @@ const WatchHistoryPage: React.FC = () => {
   const [history, setHistory] = useState<Movie[]>([]);
   const [members, setMembers] = useState<Map<string, UserProfile>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('recent');
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   useEffect(() => {
     if (!groupId) return;
@@ -54,14 +61,12 @@ const WatchHistoryPage: React.FC = () => {
   const handleRateMovie = async (movieId: string, rating: number) => {
     if (!groupId || !user) return;
     try {
-      // Optimistic UI update
       setHistory(prevHistory => 
         prevHistory.map(movie => {
           if (movie.id === movieId) {
-            // FIX: Guard against movie.groupRatings being undefined and explicitly type `r` to resolve TS error.
             const newRatings = { ...(movie.groupRatings || {}), [user.uid]: rating };
             const allRatings = Object.values(newRatings);
-            // Fix: Calculate the new average rating, ensuring all values are numeric and guarding against division by zero.
+            // FIX: Explicitly type accumulator and value to fix reduce error.
             const totalRating = allRatings.reduce((sum: number, r: unknown) => sum + (Number(r) || 0), 0);
             const newAverage = allRatings.length > 0 ? totalRating / allRatings.length : 0;
             return { ...movie, groupRatings: newRatings, averageGroupRating: newAverage };
@@ -73,7 +78,21 @@ const WatchHistoryPage: React.FC = () => {
     } catch (error) {
       console.error("Failed to rate movie:", error);
       alert("Could not save your rating. Please try again.");
-      // NOTE: In a real app, you would revert the optimistic update here
+    }
+  };
+  
+  const handleUnwatch = async (movieId: string) => {
+    if (!groupId) return;
+    const movieToUnwatch = history.find(m => m.id === movieId);
+    if (!movieToUnwatch) return;
+    
+    setHistory(prev => prev.filter(m => m.id !== movieId));
+    try {
+        await unwatchMovie(groupId, movieId);
+        showToast(`'${movieToUnwatch.title}' moved back to watchlist.`);
+    } catch (error) {
+        setHistory(prev => [...prev, movieToUnwatch]); // Revert on error
+        alert("Failed to move movie back. Please try again.");
     }
   };
 
@@ -106,7 +125,6 @@ const WatchHistoryPage: React.FC = () => {
             if (sortBy === 'rating') {
                 return (b.averageGroupRating ?? 0) - (a.averageGroupRating ?? 0);
             }
-            // Default to 'recent'
             return (b.watchedTogetherDate?.toMillis() ?? 0) - (a.watchedTogetherDate?.toMillis() ?? 0);
         });
   }, [history, filter, sortBy]);
@@ -153,6 +171,7 @@ const WatchHistoryPage: React.FC = () => {
                             groupId={groupId!}
                             onCommentAdded={handleAddComment}
                             onCommentDeleted={handleDeleteComment}
+                            onUnwatch={handleUnwatch}
                         />
                     ))}
                 </div>
@@ -192,6 +211,11 @@ const WatchHistoryPage: React.FC = () => {
         </div>
         {renderContent()}
       </main>
+      {toastMessage && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-cinema-green text-white px-6 py-3 rounded-lg shadow-lg z-50">
+            {toastMessage}
+        </div>
+      )}
     </div>
   );
 };

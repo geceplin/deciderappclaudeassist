@@ -14,6 +14,7 @@ import {
   orderBy,
   Timestamp,
   arrayUnion,
+  increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Movie, Opinion, MovieDetails, Comment } from '../types';
@@ -67,11 +68,18 @@ export const onGroupMoviesSnapshot = (
 export const addMovieToGroup = async (groupId: string, movie: MovieDetails, userId: string, userName: string): Promise<void> => {
     const groupRef = doc(db, GROUPS, groupId);
     const moviesColRef = collection(groupRef, MOVIES);
-    const newMovieRef = doc(moviesColRef);
-
+    
     await runTransaction(db, async (transaction) => {
         const groupDoc = await transaction.get(groupRef);
         if (!groupDoc.exists()) throw new Error("Group not found.");
+
+        const movieQuery = query(moviesColRef, where('tmdbId', '==', movie.tmdbId));
+        const existingMovieSnapshot = await getDocs(movieQuery);
+        if (!existingMovieSnapshot.empty) {
+            throw new Error(`"${movie.title}" is already in the watchlist.`);
+        }
+        
+        const newMovieRef = doc(moviesColRef); // Generate a new doc ref inside transaction
         
         const movieToAdd: Omit<Movie, 'id'> = {
             tmdbId: movie.tmdbId,
@@ -87,23 +95,24 @@ export const addMovieToGroup = async (groupId: string, movie: MovieDetails, user
             addedAt: serverTimestamp() as Timestamp,
             opinions: { [userId]: 'must-watch' },
             opinionCounts: { mustWatch: 1, alreadySeen: 0, pass: 0 },
+            
+            // CRITICAL FIX: Use 'null' for fields that are not yet set.
             watchedTogether: false,
             watchedTogetherDate: null,
-            watchedTogetherBy: '',
+            watchedTogetherBy: null, // Corrected from 'undefined'
             groupRatings: {},
             averageGroupRating: null,
             comments: [],
         };
 
         transaction.set(newMovieRef, movieToAdd);
-        
-        const newCount = (groupDoc.data().movieCount || 0) + 1;
         transaction.update(groupRef, { 
-            movieCount: newCount,
+            movieCount: increment(1),
             lastActivity: serverTimestamp() 
         });
     });
 };
+
 
 /**
  * Sets or removes a user's opinion on a movie and updates the aggregated counts.
@@ -162,6 +171,28 @@ export const markMovieWatchedTogether = async (groupId: string, movieId: string,
         transaction.update(groupRef, {
             lastActivity: serverTimestamp()
         });
+    });
+};
+
+/**
+ * Reverts a movie's "watched" status, moving it back to the active pool.
+ */
+export const unwatchMovie = async (groupId: string, movieId: string): Promise<void> => {
+    const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
+    const groupRef = doc(db, GROUPS, groupId);
+    
+    await runTransaction(db, async (transaction) => {
+        const movieDoc = await transaction.get(movieRef);
+        if (!movieDoc.exists()) throw new Error("Movie not found.");
+
+        transaction.update(movieRef, {
+            watchedTogether: false,
+            watchedTogetherDate: null,
+            watchedTogetherBy: null,
+            groupRatings: {},
+            averageGroupRating: null
+        });
+        transaction.update(groupRef, { lastActivity: serverTimestamp() });
     });
 };
 
@@ -225,9 +256,10 @@ export const getUnwatchedMoviesForReel = async (groupId: string): Promise<Movie[
 };
 
 /**
- * Removes a movie from a group's watchlist.
+ * Permanently deletes a movie from a group.
+ * Permission: Only the user who added the movie OR the group owner can delete.
  */
-export const removeMovieFromGroup = async (groupId: string, movieId: string, userId: string): Promise<void> => {
+export const deleteMovieFromGroup = async (groupId: string, movieId: string, userId: string): Promise<void> => {
     const groupRef = doc(db, GROUPS, groupId);
     const movieRef = doc(db, GROUPS, groupId, MOVIES, movieId);
 
@@ -239,15 +271,16 @@ export const removeMovieFromGroup = async (groupId: string, movieId: string, use
         if (!movieDoc.exists()) throw new Error("Movie not found.");
 
         const movieData = movieDoc.data();
-        if (movieData.addedBy !== userId) {
-            throw new Error("You can only remove movies you added.");
+        const groupData = groupDoc.data();
+
+        const canDelete = movieData.addedBy === userId || groupData.ownerId === userId;
+        if (!canDelete) {
+            throw new Error("You don't have permission to delete this movie.");
         }
 
         transaction.delete(movieRef);
-        
-        const newCount = Math.max(0, (groupDoc.data().movieCount || 1) - 1);
         transaction.update(groupRef, { 
-            movieCount: newCount,
+            movieCount: increment(-1),
             lastActivity: serverTimestamp() 
         });
     });

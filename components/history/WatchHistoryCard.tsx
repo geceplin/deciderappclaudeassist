@@ -5,9 +5,10 @@ import { getPosterUrl } from '../../services/tmdbService';
 import { addCommentToMovie, deleteCommentFromMovie } from '../../services/movieService';
 import { formatDate } from '../../utils/formatters';
 import { timeAgo } from '../../utils/timeAgo';
-import { Star, MessageSquare, Trash2, Loader2 } from '../icons/Icons';
+import { Star, MessageSquare, Trash2, Loader2, MoreVertical, Undo2 } from '../icons/Icons';
 import StarRatingDisplay from '../common/StarRatingDisplay';
 import Avatar from '../common/Avatar';
+import ConfirmationModal from '../common/ConfirmationModal';
 
 interface WatchHistoryCardProps {
   movie: Movie;
@@ -16,6 +17,7 @@ interface WatchHistoryCardProps {
   groupId: string;
   onCommentAdded: (movieId: string, newComment: Comment) => void;
   onCommentDeleted: (movieId: string, commentToDelete: Comment) => void;
+  onUnwatch: (movieId: string) => Promise<void>;
 }
 
 const StarRatingInput: React.FC<{ value: number; onChange: (newValue: number) => void }> = ({ value, onChange }) => {
@@ -41,7 +43,7 @@ const StarRatingInput: React.FC<{ value: number; onChange: (newValue: number) =>
   );
 };
 
-const WatchHistoryCard: React.FC<WatchHistoryCardProps> = ({ movie, onRate, members, groupId, onCommentAdded, onCommentDeleted }) => {
+const WatchHistoryCard: React.FC<WatchHistoryCardProps> = ({ movie, onRate, members, groupId, onCommentAdded, onCommentDeleted, onUnwatch }) => {
   const { user } = useAuth();
   const userRating = user ? movie.groupRatings?.[user.uid] || 0 : 0;
   const ratingEntries = Object.entries(movie.groupRatings || {});
@@ -49,6 +51,12 @@ const WatchHistoryCard: React.FC<WatchHistoryCardProps> = ({ movie, onRate, memb
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // State for unwatch action
+  const [isUnwatching, setIsUnwatching] = useState(false);
+  const [showUnwatchConfirm, setShowUnwatchConfirm] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
 
   const handleAddComment = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -78,95 +86,136 @@ const WatchHistoryCard: React.FC<WatchHistoryCardProps> = ({ movie, onRate, memb
       }
   };
   
+  const handleConfirmUnwatch = async () => {
+    setIsUnwatching(true);
+    try {
+        await onUnwatch(movie.id);
+        setShowUnwatchConfirm(false); // Parent handles optimistic update
+    } catch (error) {
+        // Error toast can be shown by parent or service
+    } finally {
+        setIsUnwatching(false);
+    }
+  };
+  
   const sortedComments = [...(movie.comments || [])].sort((a,b) => (a.timestamp?.toMillis() || 0) - (b.timestamp?.toMillis() || 0));
 
   return (
-    <div className="bg-dark-elevated rounded-xl shadow-lg flex flex-col transition-all duration-300">
-      <div className="relative aspect-[2/3]">
-        <img src={getPosterUrl(movie.posterPath)} alt={movie.title} className="w-full h-full object-cover rounded-t-xl" />
-        <div className="absolute top-2 right-2 bg-cinema-green text-white text-xs font-bold px-2 py-1 rounded">
-          ✓ WATCHED
-        </div>
-      </div>
-      <div className="p-4 flex flex-col flex-grow">
-        <h3 className="font-bold text-white truncate" title={movie.title}>{movie.title}</h3>
-        <p className="text-xs text-gray-500">
-          Watched on {formatDate(movie.watchedTogetherDate)}
-        </p>
-        
-        <div className="mt-2 flex items-center gap-2">
-           {typeof movie.averageGroupRating === 'number' && (
-              <>
-                <StarRatingDisplay rating={movie.averageGroupRating} size="sm" />
-                <span className="text-xs font-bold text-gray-300">{movie.averageGroupRating.toFixed(1)}</span>
-              </>
-            )}
-        </div>
-        
-        <div className="mt-2 flex items-center h-8">
-            <div className="flex -space-x-2 overflow-hidden">
-                {ratingEntries.slice(0, 4).map(([userId]) => (
-                    <div key={userId} title={`${members.get(userId)?.displayName || '...'}`}>
-                         <Avatar name={members.get(userId)?.displayName} size="sm" />
-                    </div>
-                ))}
-            </div>
-            {ratingEntries.length > 4 && (
-                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold z-10 border-2 border-dark-elevated ml-[-8px]">
-                    +{ratingEntries.length - 4}
-                </div>
-            )}
-        </div>
-
-        <div className="mt-auto pt-4 space-y-2">
-          <div>
-            <p className="text-xs text-gray-400 mb-1">Your rating:</p>
-            <StarRatingInput value={userRating} onChange={onRate} />
-          </div>
-          <button onClick={() => setShowComments(s => !s)} className="w-full flex items-center justify-center gap-2 text-xs py-2 text-gray-400 hover:text-white bg-dark-hover rounded-md transition-colors">
-            <MessageSquare className="w-4 h-4" />
-            <span>{showComments ? 'Hide' : 'Show'} Comments</span>
-            <span className="bg-dark px-1.5 py-0.5 rounded-full text-xs">{movie.comments?.length || 0}</span>
-          </button>
-        </div>
-      </div>
-      {showComments && (
-        <div className="p-4 border-t border-gray-700 bg-dark rounded-b-xl">
-          <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-            {sortedComments.map(comment => (
-              <div key={comment.id} className="flex items-start gap-2 text-sm">
-                <Avatar name={members.get(comment.userId)?.displayName} size="sm" />
-                <div className="flex-1 bg-dark p-2 rounded-lg">
-                  <div className="flex justify-between items-baseline">
-                    <p className="font-bold text-white text-xs">{members.get(comment.userId)?.displayName || 'User'}</p>
-                    <p className="text-gray-500 text-xs">{timeAgo(comment.timestamp)}</p>
-                  </div>
-                  <p className="text-gray-300 whitespace-pre-wrap break-words">{comment.text}</p>
-                </div>
-                {comment.userId === user?.uid && (
-                  <button onClick={() => handleDeleteComment(comment)} className="p-1 text-gray-500 hover:text-cinema-red">
-                    <Trash2 className="w-3 h-3" />
+    <>
+      <div className="bg-dark-elevated rounded-xl shadow-lg flex flex-col transition-all duration-300">
+        <div className="relative aspect-[2/3]">
+          <img src={getPosterUrl(movie.posterPath)} alt={movie.title} className="w-full h-full object-cover rounded-t-xl" />
+          <div className="absolute top-2 right-2 flex gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen(prev => !prev)}
+                onBlur={() => setTimeout(() => setMenuOpen(false), 200)}
+                className="p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80"
+                aria-label="More options"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-40 bg-dark rounded-md shadow-lg z-10 border border-gray-700">
+                  <button onClick={() => { setShowUnwatchConfirm(true); setMenuOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-300 hover:bg-dark-hover">
+                    <Undo2 className="w-4 h-4" />
+                    Unwatch
                   </button>
-                )}
-              </div>
-            ))}
-            {sortedComments.length === 0 && <p className="text-xs text-gray-500 text-center py-4">Be the first to comment!</p>}
+                </div>
+              )}
+            </div>
           </div>
-          <form onSubmit={handleAddComment} className="mt-3 flex gap-2">
-            <input 
-              type="text"
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add a comment..."
-              className="flex-1 bg-dark border-2 border-gray-600 rounded-lg text-white text-sm px-3 py-1.5 focus:outline-none focus:border-gold"
-            />
-            <button type="submit" disabled={isSubmitting || !newComment.trim()} className="px-3 py-1.5 bg-gold text-dark font-bold text-sm rounded-lg disabled:bg-gold-dark disabled:cursor-not-allowed">
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Post'}
-            </button>
-          </form>
         </div>
-      )}
-    </div>
+        <div className="p-4 flex flex-col flex-grow">
+          <h3 className="font-bold text-white truncate" title={movie.title}>{movie.title}</h3>
+          <p className="text-xs text-gray-500">
+            Watched on {formatDate(movie.watchedTogetherDate)}
+          </p>
+          
+          <div className="mt-2 flex items-center gap-2">
+            {typeof movie.averageGroupRating === 'number' && (
+                <>
+                  <StarRatingDisplay rating={movie.averageGroupRating} size="sm" />
+                  <span className="text-xs font-bold text-gray-300">{movie.averageGroupRating.toFixed(1)}</span>
+                </>
+              )}
+          </div>
+          
+          <div className="mt-2 flex items-center h-8">
+              <div className="flex -space-x-2 overflow-hidden">
+                  {ratingEntries.slice(0, 4).map(([userId]) => (
+                      <div key={userId} title={`${members.get(userId)?.displayName || '...'}`}>
+                          <Avatar name={members.get(userId)?.displayName} size="sm" />
+                      </div>
+                  ))}
+              </div>
+              {ratingEntries.length > 4 && (
+                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold z-10 border-2 border-dark-elevated ml-[-8px]">
+                      +{ratingEntries.length - 4}
+                  </div>
+              )}
+          </div>
+
+          <div className="mt-auto pt-4 space-y-2">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Your rating:</p>
+              <StarRatingInput value={userRating} onChange={onRate} />
+            </div>
+            <button onClick={() => setShowComments(s => !s)} className="w-full flex items-center justify-center gap-2 text-xs py-2 text-gray-400 hover:text-white bg-dark-hover rounded-md transition-colors">
+              <MessageSquare className="w-4 h-4" />
+              <span>{showComments ? 'Hide' : 'Show'} Comments</span>
+              <span className="bg-dark px-1.5 py-0.5 rounded-full text-xs">{movie.comments?.length || 0}</span>
+            </button>
+          </div>
+        </div>
+        {showComments && (
+          <div className="p-4 border-t border-gray-700 bg-dark rounded-b-xl">
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+              {sortedComments.map(comment => (
+                <div key={comment.id} className="flex items-start gap-2 text-sm">
+                  <Avatar name={members.get(comment.userId)?.displayName} size="sm" />
+                  <div className="flex-1 bg-dark p-2 rounded-lg">
+                    <div className="flex justify-between items-baseline">
+                      <p className="font-bold text-white text-xs">{members.get(comment.userId)?.displayName || 'User'}</p>
+                      <p className="text-gray-500 text-xs">{timeAgo(comment.timestamp)}</p>
+                    </div>
+                    <p className="text-gray-300 whitespace-pre-wrap break-words">{comment.text}</p>
+                  </div>
+                  {comment.userId === user?.uid && (
+                    <button onClick={() => handleDeleteComment(comment)} className="p-1 text-gray-500 hover:text-cinema-red">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {sortedComments.length === 0 && <p className="text-xs text-gray-500 text-center py-4">Be the first to comment!</p>}
+            </div>
+            <form onSubmit={handleAddComment} className="mt-3 flex gap-2">
+              <input 
+                type="text"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                className="flex-1 bg-dark border-2 border-gray-600 rounded-lg text-white text-sm px-3 py-1.5 focus:outline-none focus:border-gold"
+              />
+              <button type="submit" disabled={isSubmitting || !newComment.trim()} className="px-3 py-1.5 bg-gold text-dark font-bold text-sm rounded-lg disabled:bg-gold-dark disabled:cursor-not-allowed">
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Post'}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+      <ConfirmationModal
+        isOpen={showUnwatchConfirm}
+        onClose={() => setShowUnwatchConfirm(false)}
+        onConfirm={handleConfirmUnwatch}
+        title="Unwatch this movie?"
+        description={`This will move "${movie.title}" back to your group's watchlist and clear all ratings.`}
+        confirmText="Move to Watchlist"
+        confirmStyle="primary"
+        isLoading={isUnwatching}
+      />
+    </>
   );
 };
 

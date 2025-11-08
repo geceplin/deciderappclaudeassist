@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getGroupById, leaveGroup } from '../services/groupService';
-import { onGroupMoviesSnapshot, addMovieToGroup } from '../services/movieService';
+import { onGroupMoviesSnapshot, addMovieToGroup, deleteMovieFromGroup } from '../services/movieService';
 import { getUsersByIds } from '../services/userService';
 import { Group, Movie, UserProfile, MovieDetails, Opinion } from '../types';
 
@@ -37,11 +37,15 @@ const GroupDetailPage: React.FC = () => {
   const [isAddMovieModalOpen, setAddMovieModalOpen] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
 
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   useEffect(() => {
     if (toastMessage) {
         const timer = setTimeout(() => {
             setToastMessage(null);
-            // Clear the location state to prevent toast from reappearing on refresh
             window.history.replaceState({}, document.title)
         }, 4000);
         return () => clearTimeout(timer);
@@ -108,6 +112,23 @@ const GroupDetailPage: React.FC = () => {
       throw err; // Re-throw for modal to handle
     }
   };
+  
+  const handleDeleteMovie = async (movieId: string) => {
+    if (!groupId || !user) return;
+    const movieToDelete = movies.find(m => m.id === movieId);
+    if (!movieToDelete) return;
+
+    // Optimistic update
+    setMovies(prev => prev.filter(m => m.id !== movieId));
+    try {
+      await deleteMovieFromGroup(groupId, movieId, user.uid);
+      showToast(`'${movieToDelete.title}' was deleted.`);
+    } catch (err: any) {
+      // Revert on failure
+      setMovies(prev => [...prev, movieToDelete].sort((a,b) => (b.addedAt?.toMillis() || 0) - (a.addedAt?.toMillis() || 0)));
+      alert(`Failed to delete movie: ${err.message}`);
+    }
+  };
 
   const enrichedMovies = useMemo(() => {
     return movies.map(movie => {
@@ -120,7 +141,6 @@ const GroupDetailPage: React.FC = () => {
   }, [movies, members]);
 
   const filteredMovies = useMemo(() => {
-    // Show unwatched movies only on this page
     const unwatched = enrichedMovies.filter(m => !m.watchedTogether);
 
     if (filter === 'all') {
@@ -192,7 +212,6 @@ const GroupDetailPage: React.FC = () => {
         </header>
 
         <main className="p-4 md:p-8 max-w-7xl mx-auto">
-          {/* Tabs */}
           <div className="border-b border-gray-700 flex items-center">
               <TabButton tabId="watchlist" label="Watchlist" icon={<Film className="w-4 h-4" />} />
               <TabButton tabId="members" label="Members" icon={<Users className="w-4 h-4" />} />
@@ -223,8 +242,10 @@ const GroupDetailPage: React.FC = () => {
                             <MovieCard 
                               key={movie.id} 
                               movie={movie} 
-                              groupId={group.id} 
+                              groupId={group.id}
+                              groupOwnerId={group.ownerId}
                               onClick={() => setSelectedMovie(movie)}
+                              onDelete={handleDeleteMovie}
                             />
                         ))}
                     </div>
@@ -268,16 +289,7 @@ const GroupDetailPage: React.FC = () => {
       )}
 
       {toastMessage && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-cinema-green text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in-out">
-             <style>{`
-                @keyframes fade-in-out {
-                    0% { opacity: 0; transform: translateY(20px) translateX(-50%); }
-                    15% { opacity: 1; transform: translateY(0) translateX(-50%); }
-                    85% { opacity: 1; transform: translateY(0) translateX(-50%); }
-                    100% { opacity: 0; transform: translateY(20px) translateX(-50%); }
-                }
-                .animate-fade-in-out { animation: fade-in-out 4s ease-in-out forwards; }
-            `}</style>
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-cinema-green text-white px-6 py-3 rounded-lg shadow-lg z-50">
             {toastMessage}
         </div>
       )}

@@ -1,5 +1,5 @@
 import { User as FirebaseUser } from 'firebase/auth';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, increment } from 'firebase/firestore';
 
 export interface UserProfile {
   uid: string;
@@ -106,6 +106,23 @@ export interface Video {
   type: string;
   name: string;
   official: boolean;
+}
+
+export interface MoviePreview {
+  tmdbId: number;
+  title: string;
+  year: number | null;
+  rating: number;
+  runtime: number | null;
+  genres: string[];
+  overview: string;
+  cast: {
+    name: string;
+    character: string;
+    profilePath: string | null;
+  }[];
+  posterPath: string | null;
+  backdropPath: string | null;
 }
 
 export interface AuthContextType {
