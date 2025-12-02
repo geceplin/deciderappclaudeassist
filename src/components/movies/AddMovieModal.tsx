@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as tmdbService from '../../services/tmdbService';
 import { MovieDetails, MovieSearchResult } from '../../types';
@@ -239,7 +240,18 @@ const AddMovieModal: React.FC<MovieSearchModalProps> = ({ isOpen, onClose, onAdd
         
         if (activeTab === 'browse') {
             return <div className="space-y-4">
-                {browseCategories.map(cat => <BrowseCategory key={cat.id} category={cat} onMovieClick={setPreviewMovieId} onMovieAdd={handleAddMovie} existingTmdbIds={existingTmdbIds} addingMovieId={addingMovieId} />)}
+                {browseCategories.map(cat => (
+                    <BrowseCategory 
+                        key={cat.id} 
+                        category={cat} 
+                        onMovieClick={setPreviewMovieId} 
+                        onMovieAdd={handleAddMovie} 
+                        onWatchTrailer={(movie) => handleWatchTrailer(movie)}
+                        existingTmdbIds={existingTmdbIds} 
+                        addingMovieId={addingMovieId}
+                        loadingTrailerId={loadingTrailerId}
+                    />
+                ))}
             </div>;
         }
 

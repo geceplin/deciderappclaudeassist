@@ -2,6 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './src/i18n/index.ts'; // Import i18n configuration with explicit extension
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
