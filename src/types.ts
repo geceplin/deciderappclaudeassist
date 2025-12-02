@@ -1,3 +1,4 @@
+
 import { User as FirebaseUser } from 'firebase/auth';
 import { Timestamp, increment } from 'firebase/firestore';
 
@@ -106,6 +107,13 @@ export interface Video {
   type: string;
   name: string;
   official: boolean;
+}
+
+export interface WatchProvider {
+  provider_id: number;
+  provider_name: string;
+  logo_path: string;
+  display_priority: number;
 }
 
 export interface MoviePreview {
