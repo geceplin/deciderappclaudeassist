@@ -162,7 +162,22 @@ export const getMovieVideos = async (movieId: number): Promise<Video[]> => {
 };
 
 /**
+ * Finds the official trailer Key from a list of videos for embedding.
+ * @param videos Array of video objects from TMDb.
+ * @returns The YouTube video ID, or null.
+ */
+export const getTrailerKey = (videos: Video[]): string | null => {
+    if (!videos || videos.length === 0) return null;
+    const officialTrailer = videos.find(v => v.type === 'Trailer' && v.site === 'YouTube' && v.official);
+    const anyTrailer = videos.find(v => v.type === 'Trailer' && v.site === 'YouTube');
+    const teaser = videos.find(v => v.type === 'Teaser' && v.site === 'YouTube'); 
+    const trailer = officialTrailer || anyTrailer || teaser;
+    return trailer ? trailer.key : null;
+};
+
+/**
  * Fetches a lightweight preview for a movie, optimized for modals.
+ * Includes trailer key if available.
  * @param movieId The TMDb ID of the movie.
  * @returns A promise resolving to the movie preview data.
  */
@@ -170,7 +185,7 @@ export const getMoviePreview = async (movieId: number): Promise<MoviePreview> =>
     const cacheKey = `preview-${movieId}`;
     const fetcher = async () => {
         const data = await _fetchFromTMDb(`/movie/${movieId}`, {
-            append_to_response: 'credits',
+            append_to_response: 'credits,videos',
             language: 'en-US'
         });
         return {
@@ -188,36 +203,20 @@ export const getMoviePreview = async (movieId: number): Promise<MoviePreview> =>
             })) || [],
             posterPath: data.poster_path,
             backdropPath: data.backdrop_path,
+            youtubeKey: getTrailerKey(data.videos?.results || []),
         };
     };
     return _fetchWithCache(cacheKey, fetcher, PREVIEW_CACHE_DURATION_MS);
 };
 
 /**
- * Finds the official trailer URL from a list of videos.
- * @param videos Array of video objects from TMDb.
- * @returns The YouTube URL for the trailer, or null.
+ * Helper to fetch just the trailer key for a movie.
+ * @param movieId The TMDb ID.
+ * @returns The trailer key or null.
  */
-export const getTrailerUrl = (videos: Video[]): string | null => {
-    if (!videos || videos.length === 0) return null;
-    const officialTrailer = videos.find(v => v.type === 'Trailer' && v.site === 'YouTube' && v.official);
-    const anyTrailer = videos.find(v => v.type === 'Trailer' && v.site === 'YouTube');
-    const trailer = officialTrailer || anyTrailer;
-    return trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : null;
-};
-
-/**
- * Finds the official trailer Key from a list of videos for embedding.
- * @param videos Array of video objects from TMDb.
- * @returns The YouTube video ID, or null.
- */
-export const getTrailerKey = (videos: Video[]): string | null => {
-    if (!videos || videos.length === 0) return null;
-    const officialTrailer = videos.find(v => v.type === 'Trailer' && v.site === 'YouTube' && v.official);
-    const anyTrailer = videos.find(v => v.type === 'Trailer' && v.site === 'YouTube');
-    const teaser = videos.find(v => v.type === 'Teaser' && v.site === 'YouTube'); 
-    const trailer = officialTrailer || anyTrailer || teaser;
-    return trailer ? trailer.key : null;
+export const getMovieTrailer = async (movieId: number): Promise<string | null> => {
+    const videos = await getMovieVideos(movieId);
+    return getTrailerKey(videos);
 };
 
 

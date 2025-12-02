@@ -85,8 +85,7 @@ const GroupMembers: React.FC<GroupMembersProps> = ({ group, members, currentUser
     }
   };
 
-  // FIX: Explicitly type the sort callback parameters to resolve 'property does not exist on type unknown' error.
-  const sortedMembers = Array.from(members.values()).sort((a: UserProfile, b: UserProfile) => {
+  const sortedMembers = (Array.from(members.values()) as UserProfile[]).sort((a, b) => {
     if (a.uid === group.ownerId) return -1;
     if (b.uid === group.ownerId) return 1;
     return (a.displayName || '').localeCompare(b.displayName || '');

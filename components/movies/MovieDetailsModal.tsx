@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Movie, CastMember, CrewMember } from '../../types';
 import * as tmdbService from '../../services/tmdbService';
-import { getBackdropUrl, getProfileUrl, getTrailerUrl } from '../../services/tmdbService';
+import { getBackdropUrl, getProfileUrl, getTrailerKey } from '../../services/tmdbService';
 import { X, Loader2, PlayCircle, User } from '../icons/Icons';
+import TrailerModal from './TrailerModal';
 
 interface MovieDetailsModalProps {
   movie: Movie;
@@ -12,7 +13,8 @@ interface MovieDetailsModalProps {
 const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({ movie, onClose }) => {
   const [cast, setCast] = useState<CastMember[]>([]);
   const [director, setDirector] = useState<CrewMember | null>(null);
-  const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
+  const [showTrailer, setShowTrailer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -31,7 +33,7 @@ const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({ movie, onClose })
         ]);
         setCast(credits.cast);
         setDirector(credits.director);
-        setTrailerUrl(getTrailerUrl(videos));
+        setTrailerKey(getTrailerKey(videos));
       } catch (err) {
         console.error("Failed to fetch movie details:", err);
         setError("Could not load movie details. Please try again later.");
@@ -130,17 +132,27 @@ const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({ movie, onClose })
                 </div>
               )}
               
-              {trailerUrl && (
-                  <a href={trailerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-3 w-full sm:w-auto px-6 py-3 bg-cinema-red text-white font-bold rounded-lg hover:bg-red-700 transition-colors transform hover:scale-105">
+              {trailerKey && (
+                  <button 
+                    onClick={() => setShowTrailer(true)} 
+                    className="inline-flex items-center justify-center gap-3 w-full sm:w-auto px-6 py-3 bg-cinema-red text-white font-bold rounded-lg hover:bg-red-700 transition-colors transform hover:scale-105"
+                  >
                       <PlayCircle className="w-6 h-6" />
                       Watch Trailer
-                  </a>
+                  </button>
               )}
 
             </div>
           )}
         </main>
       </div>
+      
+      <TrailerModal 
+        isOpen={showTrailer} 
+        onClose={() => setShowTrailer(false)} 
+        youtubeKey={trailerKey} 
+        movieTitle={movie.title} 
+      />
     </div>
   );
 };
