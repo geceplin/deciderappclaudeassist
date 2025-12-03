@@ -5,7 +5,7 @@ import * as tmdbService from '../../services/tmdbService';
 import { getBackdropUrl, getProfileUrl, getTrailerKey } from '../../services/tmdbService';
 import { X, Loader2, PlayCircle, User } from '../icons/Icons';
 import TrailerModal from './TrailerModal';
-import WhereToWatch from './WhereToWatch';
+import StreamingBadges from './StreamingBadges';
 
 interface MovieDetailsModalProps {
   movie: Movie;
@@ -98,6 +98,11 @@ const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({ movie, onClose })
             <div className="text-center text-cinema-red py-12">{error}</div>
           ) : (
             <div className="space-y-6">
+              {/* Streaming Availability Section */}
+              <div className="bg-dark/50 p-4 rounded-xl border border-gray-700/50 shadow-inner">
+                  <StreamingBadges movieId={movie.tmdbId} size="md" showLabel={true} />
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 {movie.genres.map(genre => (
                   <span key={genre} className="px-3 py-1 bg-dark-hover text-gray-300 text-xs font-semibold rounded-full">{genre}</span>
@@ -108,9 +113,6 @@ const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({ movie, onClose })
                 <h3 className="text-xl font-bold text-gold mb-2">Overview</h3>
                 <p className="text-gray-300 leading-relaxed">{movie.overview || "No overview available."}</p>
               </div>
-
-              {/* Streaming Section */}
-              <WhereToWatch tmdbId={movie.tmdbId} />
 
               {director && (
                 <div>

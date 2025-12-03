@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { WatchProvider } from '../../types';
-import { getStreamingProviders, getProviderLogoUrl } from '../../services/streamingService';
+import { getStreamingAvailability, getProviderLogoUrl } from '../../services/streamingService';
 import { Loader2 } from '../icons/Icons';
 
 interface WhereToWatchProps {
@@ -15,9 +15,20 @@ const WhereToWatch: React.FC<WhereToWatchProps> = ({ tmdbId }) => {
   useEffect(() => {
     const fetchProviders = async () => {
       setLoading(true);
-      const data = await getStreamingProviders(tmdbId);
-      setProviders(data);
-      setLoading(false);
+      try {
+        const data = await getStreamingAvailability(tmdbId);
+        // Default to showing flatrate (subscription) providers
+        if (data && data.flatrate) {
+          setProviders(data.flatrate);
+        } else {
+          setProviders([]);
+        }
+      } catch (error) {
+        console.error("Failed to load providers", error);
+        setProviders([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
     if (tmdbId) {

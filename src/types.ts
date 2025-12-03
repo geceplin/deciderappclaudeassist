@@ -116,6 +116,13 @@ export interface WatchProvider {
   display_priority: number;
 }
 
+export interface StreamingAvailability {
+  flatrate?: WatchProvider[]; // Subscription (Netflix, Disney+)
+  rent?: WatchProvider[];     // Rental (Google Play, Apple TV)
+  buy?: WatchProvider[];      // Purchase
+  link?: string;              // Link to TMDb watch providers page
+}
+
 export interface MoviePreview {
   tmdbId: number;
   title: string;

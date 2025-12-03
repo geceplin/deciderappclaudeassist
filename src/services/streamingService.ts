@@ -1,29 +1,40 @@
 
-import { WatchProvider } from '../types';
+import { StreamingAvailability } from '../types';
 
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/original';
 
-export const getStreamingProviders = async (tmdbId: number): Promise<WatchProvider[]> => {
+// Cache to prevent excessive function calls during a session
+const cache = new Map<string, { data: StreamingAvailability | null, timestamp: number }>();
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+export const getStreamingAvailability = async (movieId: number, country: string = 'US'): Promise<StreamingAvailability | null> => {
+  const cacheKey = `${movieId}-${country}`;
+  const cached = cache.get(cacheKey);
+  
+  if (cached && (Date.now() - cached.timestamp < CACHE_DURATION)) {
+      return cached.data;
+  }
+
   try {
-    // In local dev without Netlify CLI, this might 404 unless proxy is set up.
-    // In production (Netlify), this works relative to domain.
-    const response = await fetch(`/.netlify/functions/getStreaming?movieId=${tmdbId}`);
+    // Call the Netlify function
+    const response = await fetch(`/.netlify/functions/getStreaming?movieId=${movieId}&country=${country}`);
     
     if (!response.ok) {
-        // Fallback or silence error since this is a "nice to have" feature
-        console.warn('Could not fetch streaming data');
-        return [];
+        console.warn('Could not fetch streaming data via function');
+        return null;
     }
     
-    const providers: WatchProvider[] = await response.json();
-    return providers;
+    const data: StreamingAvailability | null = await response.json();
+    
+    cache.set(cacheKey, { data, timestamp: Date.now() });
+    return data;
   } catch (error) {
     console.error('Error in streaming service:', error);
-    return [];
+    return null;
   }
 };
 
-export const getProviderLogoUrl = (logoPath: string): string => {
+export const getProviderLogoUrl = (logoPath: string, size: string = 'original'): string => {
   if (!logoPath) return '';
   return `${IMAGE_BASE_URL}${logoPath}`;
 };

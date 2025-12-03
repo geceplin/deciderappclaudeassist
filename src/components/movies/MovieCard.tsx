@@ -1,15 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-// FIX: Imported the missing Opinion type used in the handleOpinionChange function.
-import { Movie, Opinion, WatchProvider } from '../../types';
+import { Movie, Opinion } from '../../types';
 import { setMovieOpinion } from '../../services/movieService';
 import { getPosterUrl } from '../../services/tmdbService';
-import { getStreamingProviders, getProviderLogoUrl } from '../../services/streamingService';
 import Avatar from '../common/Avatar';
 import OpinionButtons from './OpinionButtons';
 import ConfirmationModal from '../common/ConfirmationModal';
 import { MoreVertical, Trash2 } from '../icons/Icons';
+import StreamingBadges from './StreamingBadges';
 
 interface MovieCardProps {
   movie: Movie;
@@ -27,31 +26,9 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, groupId, groupOwnerId, onC
   const [menuOpen, setMenuOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  // Streaming State
-  const [topProvider, setTopProvider] = useState<WatchProvider | null>(null);
   
   const posterUrl = getPosterUrl(movie.posterPath, 'w500');
   
-  // Fetch streaming info on mount
-  useEffect(() => {
-    let isMounted = true;
-    const fetchStreaming = async () => {
-        if (!movie.tmdbId) return;
-        const providers = await getStreamingProviders(movie.tmdbId);
-        if (isMounted && providers.length > 0) {
-            // Priority list for icon overlay
-            const majorProviders = ['Netflix', 'Disney+', 'Amazon Prime Video', 'Max', 'Hulu', 'Peacock', 'Apple TV+'];
-            
-            // Try to find a major provider first
-            const featured = providers.find(p => majorProviders.includes(p.provider_name)) || providers[0];
-            setTopProvider(featured);
-        }
-    };
-    fetchStreaming();
-    return () => { isMounted = false; };
-  }, [movie.tmdbId]);
-
   if (!user) return null;
 
   const canDelete = user.uid === movie.addedBy || user.uid === groupOwnerId;
@@ -96,7 +73,7 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, groupId, groupOwnerId, onC
               <button
                 onClick={() => setMenuOpen(prev => !prev)}
                 onBlur={() => setTimeout(() => setMenuOpen(false), 200)}
-                className="p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80"
+                className="p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 backdrop-blur-sm"
                 aria-label="More options"
               >
                 <MoreVertical className="w-4 h-4" />
@@ -113,41 +90,33 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, groupId, groupOwnerId, onC
           </div>
         )}
         
-        <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden pointer-events-none">
+        <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden pointer-events-none group">
           <img 
             src={posterUrl} 
             alt={movie.title} 
-            className="w-full h-full object-cover" 
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
             loading="lazy" 
             onError={(e) => { (e.target as HTMLImageElement).src = getPosterUrl(null); }}
           />
           {movie.rating > 0 && (
-              <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded-full flex items-center">
+              <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded-full flex items-center shadow-md">
                   ⭐<span className="ml-1">{movie.rating.toFixed(1)}</span>
               </div>
           )}
-
-          {/* Streaming Icon Overlay */}
-          {topProvider && (
-             <div className="absolute bottom-2 right-2 z-10">
-                <div className="w-8 h-8 rounded-md overflow-hidden shadow-md ring-1 ring-white/20" title={`Available on ${topProvider.provider_name}`}>
-                    <img 
-                        src={getProviderLogoUrl(topProvider.logo_path)} 
-                        alt={topProvider.provider_name}
-                        className="w-full h-full object-cover"
-                    />
-                </div>
-             </div>
-          )}
         </div>
 
-        <div className="w-full mt-4 pointer-events-none">
-          <h3 className="font-bold text-white truncate" title={movie.title}>{movie.title}</h3>
+        <div className="w-full mt-4 pointer-events-none flex flex-col items-center">
+          <h3 className="font-bold text-white truncate w-full" title={movie.title}>{movie.title}</h3>
           <p className="text-sm text-gray-400">{movie.year}</p>
           
-          <p className="text-xs text-gray-500 mt-2 h-10 overflow-hidden" title={movie.overview}>
+          <p className="text-xs text-gray-500 mt-2 h-10 overflow-hidden w-full" title={movie.overview}>
               {movie.overview.substring(0, 60)}{movie.overview.length > 60 ? '...' : ''}
           </p>
+
+          {/* Streaming Badges placed directly below overview */}
+          <div className="w-full flex justify-center mt-2 h-8">
+            <StreamingBadges movieId={movie.tmdbId} showLabel={true} />
+          </div>
         </div>
 
         <div onClick={stopPropagation} className="w-full">
