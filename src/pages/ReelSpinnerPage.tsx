@@ -1,16 +1,17 @@
+
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import { getGroupById } from '../services/groupService';
-import { getUnwatchedMoviesForReel, markMovieWatchedTogether } from '../services/movieService';
-import { filterMoviesForReel } from '../utils/spinLogic';
-import { Movie, Group } from '../types';
-import { useRoulette } from '../hooks/useRoulette';
-import LoadingSpinner from '../components/common/LoadingSpinner';
-import MovieReel from '../components/roulette/MovieReel';
-import ResultModal from '../components/roulette/ResultModal';
-import ReelFilterTabs, { ReelFilterType } from '../components/roulette/ReelFilterTabs';
-import { ChevronLeft, Film, Ticket } from '../components/icons/Icons';
+import { useAuth } from '../hooks/useAuth.ts';
+import { getGroupById } from '../services/groupService.ts';
+import { getUnwatchedMoviesForReel, markMovieWatchedTogether } from '../services/movieService.ts';
+import { filterMoviesForReel } from '../utils/spinLogic.ts';
+import { Movie, Group } from '../types.ts';
+import { useRoulette } from '../hooks/useRoulette.ts';
+import LoadingSpinner from '../components/common/LoadingSpinner.tsx';
+import MovieReel from '../components/roulette/MovieReel.tsx';
+import ResultModal from '../components/roulette/ResultModal.tsx';
+import ReelFilterTabs, { ReelFilterType } from '../components/roulette/ReelFilterTabs.tsx';
+import { ChevronLeft, Film, Ticket } from '../components/icons/Icons.tsx';
 
 const ReelSpinnerPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();

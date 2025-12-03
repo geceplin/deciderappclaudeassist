@@ -2,12 +2,14 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getGroupById } from '../services/groupService';
-import { getUnwatchedMoviesForReel } from '../services/movieService';
+import { getUnwatchedMoviesForReel, markMovieWatchedTogether } from '../services/movieService';
 import { filterMoviesForReel } from '../utils/spinLogic';
 import { useRoulette } from '../hooks/useRoulette';
+import { Group, Movie } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import MovieReel from '../components/roulette/MovieReel';
 import ResultModal from '../components/roulette/ResultModal';
+import ReelFilterTabs, { ReelFilterType } from '../components/roulette/ReelFilterTabs';
 import { getPosterUrl } from '../services/tmdbService';
 import { ChevronLeft, Film, Ticket } from '../components/icons/Icons';
 
